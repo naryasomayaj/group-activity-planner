@@ -1,31 +1,26 @@
-import { createUserWithEmailAndPassword, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth'
-import { auth } from './firebase'
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import './App.css'
 
-import LoginForm from './components/LoginForm';
-import SignupForm from './components/SignUpForm';
+import NavBar from './components/NavBar.jsx'
+import Home from './pages/Home.jsx';
+import About from './pages/About.jsx'
+import Profile from './pages/Profile.jsx'
+import Login from './pages/Login.jsx'
+import Signup from './pages/Signup.jsx'
 
 function App() {
-
-  const handleCreateUser = async () => {
-    const result = await createUserWithEmailAndPassword(auth, );
-
-    await sendEmailVerification(result.user);
-  }
-
-  const handleSignIn = async () => {
-    const result = await SignInWithEmailAndPassword(auth, )
-  }
-
   return (
     <>
-      <div>
-        <h1>Test Form</h1>
-        <h2>Sign Up</h2>
-        <SignupForm />
-        <h2>Login</h2>
-        <LoginForm />
-      </div>
+      <BrowserRouter>
+      <NavBar />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+      </Routes>
+      </BrowserRouter>
     </>
   )
 }
