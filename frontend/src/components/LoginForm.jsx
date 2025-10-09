@@ -12,9 +12,22 @@ function LoginForm() {
         e.preventDefault();
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            console.log('Logged in:', userCredential.user);
+            const user = userCredential.user;
+            const idToken= await user.getIdToken();
+            console.log("ID Token:", idToken);
+            //console.log('Logged in:', userCredential.user);
+            const response = await fetch("http://localhost:8000/api/protected", {
+            method: "GET",   // or POST if needed
+            headers: {
+                "Authorization": `Bearer ${idToken}`, // send JWT
+                "Content-Type": "application/json"
+            }
+         });
+
+    const data = await response.json();
+    console.log("Backend response:", data);
         } catch (error) {
-            console.error(error.message);
+            console.error("Login error",error.message);
         }
     };
 
