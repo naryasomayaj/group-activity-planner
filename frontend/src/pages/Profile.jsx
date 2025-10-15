@@ -8,6 +8,7 @@ function Profile() {
     const [activities, setActivities] = useState("");
 
     const auth = getAuth();
+    const apiUrl = import.meta.env.VITE_API_URL;
 
     onAuthStateChanged(auth, (user) => {
         if(user) {
@@ -33,7 +34,7 @@ function Profile() {
 
     const fetchData = async (e) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/users/${getUID}`, {
+            const response = await fetch(`${apiUrl}/api/users/${getUID}`, {
                 method: "GET",
                 headers: {
                     "Authorization" : `accessToken ${getToken()}`
@@ -52,7 +53,7 @@ function Profile() {
 
     const submitData = async (e) => {
         try {
-            const response = await fetch(`http://localhost:5000/api/users/${getUID}`, {
+            const response = await fetch(`${apiUrl}/api/users/${getUID}`, {
                 method: "PUT",
                 headers: {
                     "Content-Type" : "application/json",
