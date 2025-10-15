@@ -13,6 +13,7 @@ function Profile() {
     onAuthStateChanged(auth, (user) => {
         if(user) {
             setEmail(user.email);
+            fetchData();
         }
     });
     
@@ -34,7 +35,8 @@ function Profile() {
 
     const fetchData = async (e) => {
         try {
-            const response = await fetch(`${apiUrl}/api/users/${getUID}`, {
+            const uid = auth.currentUser.uid;
+            const response = await fetch(`${apiUrl}/api/users/${uid}`, {
                 method: "GET",
                 headers: {
                     "Authorization" : `accessToken ${getToken()}`
@@ -53,7 +55,8 @@ function Profile() {
 
     const submitData = async (e) => {
         try {
-            const response = await fetch(`${apiUrl}/api/users/${getUID}`, {
+            const uid = auth.currentUser.uid;;
+            const response = await fetch(`${apiUrl}/api/users/${uid}`, {
                 method: "PUT",
                 headers: {
                     "Content-Type" : "application/json",
@@ -68,10 +71,6 @@ function Profile() {
             console.error("Error submitting data:", error);
         }
     }
-
-    useEffect(() => {
-        fetchData();
-    }, []);
 
     const handleEdit = (e) => {
         setEdit(true);
