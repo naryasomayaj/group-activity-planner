@@ -1,0 +1,7 @@
+form.login-form {
+    display: table;
+}
+
+div.login-form-div {
+    display: table-row;
+}
