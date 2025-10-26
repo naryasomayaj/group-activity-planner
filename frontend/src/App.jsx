@@ -1,26 +1,14 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import './App.css'
+//import './App.css'
+/* Simplified version of the frontend written by Ben */
+/* Originally, I wrote a fancier frontend, but this should be clearer for others to work with */
 
-import NavBar from './components/NavBar.jsx'
-import Home from './pages/Home.jsx';
-import About from './pages/About.jsx'
-import Profile from './pages/Profile.jsx'
-import Login from './pages/Login.jsx'
-import Signup from './pages/Signup.jsx'
+import SinglePage from './pages/SinglePage.jsx'
 
 function App() {
   return (
     <>
-      <BrowserRouter>
-      <NavBar />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-      </Routes>
-      </BrowserRouter>
+      <SinglePage />
     </>
   )
 }

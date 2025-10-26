@@ -6,7 +6,7 @@ import { auth } from '../firebase';
 import './LoginForm.css'
 
 function LoginForm() {
-    const nav = useNavigate();
+
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
@@ -15,7 +15,6 @@ function LoginForm() {
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             console.log('Logged in:', userCredential.user);
-            nav("/");
         } catch (error) {
             console.error(error.message);
         }
