@@ -6,8 +6,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import LoginForm from '../components/LoginForm';
 import SignupForm from '../components/SignUpForm';
 
@@ -18,9 +19,12 @@ function SinglePage() {
     const [loginStep, setLoginStep] = useState(0);
     const [activeTab, setActiveTab] = useState("tab1");
     const [isProfileEdit, setProfileEdit] = useState(false);
-    const [name, setName] = useState("");
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
     const [email, setEmail] = useState("");
-    const [activities, setActivities] = useState("");
+    const [age, setAge] = useState("");
+    const [interests, setInterests] = useState([]);
+    const [newInterest, setNewInterest] = useState("");
     const [groupJoinID, setGroupJoinID] = useState("");
     const [groupInfo, setGroupInfo] = useState([]);
 
@@ -66,12 +70,45 @@ function SinglePage() {
             </>
     }
 
-    const submitData = () => {
-        /* This function must submit the user's data to the database */
+    const submitData = async () => {
+        try {
+            const user = auth.currentUser;
+            if (user) {
+                const userDocRef = doc(db, 'Users', user.uid);
+                await updateDoc(userDocRef, {
+                    firstName: firstName,
+                    lastName: lastName,
+                    age: parseInt(age) || null,
+                    interests: interests
+                });
+                console.log("Profile updated successfully!");
+            }
+        } catch (error) {
+            console.error("Error updating profile:", error);
+        }
     }
 
     const fetchData = async () => {
-        /* This function must fetch the user's data from the database */
+        try {
+            const user = auth.currentUser;
+            if (user) {
+                const userDocRef = doc(db, 'Users', user.uid);
+                const userDoc = await getDoc(userDocRef);
+                
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    setEmail(userData.email);
+                    setFirstName(userData.firstName || '');
+                    setLastName(userData.lastName || '');
+                    setAge(userData.age || '');
+                    setInterests(userData.interests || []);
+                } else {
+                    console.log("No user document found!");
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching user data:", error);
+        }
     }
 
     const fetchGroups = () => {
@@ -149,14 +186,31 @@ function SinglePage() {
     }
 
     const handleSubmit = async (e) => {
-        setProfileEdit(false);
-        submitData();
-        fetchData();
+        try {
+            await submitData();
+            await fetchData();
+            setProfileEdit(false);
+        } catch (error) {
+            console.error("Error saving profile:", error);
+            // You might want to show an error message to the user here
+        }
     }
 
     const handleCancel = (e) => {
         setProfileEdit(false);
         fetchData();
+    }
+
+    const addInterest = (e) => {
+        e.preventDefault();
+        if (newInterest.trim()) {
+            setInterests([...interests, newInterest.trim()]);
+            setNewInterest('');
+        }
+    }
+
+    const removeInterest = (indexToRemove) => {
+        setInterests(interests.filter((_, index) => index !== indexToRemove));
     }
 
     return(
@@ -213,31 +267,99 @@ function SinglePage() {
                     </div>
                 </div>}
                 {activeTab === "tab2" && <div className="profile-area centered">
-                                    {isProfileEdit ?
-                                                    <>
-                                                    <h3>Name: </h3>
-                                                    <input type="text" name="name" value={name} onChange={(e) => setName(e.target.value)} />
-                                                    <h3>Email: </h3>
-                                                    <input type="text" name="email" value={email} readOnly />
-                                                    <h3>Activities: </h3>
-                                                    <textarea name="activities" rows="5" cols="40" placeholder="Enter your comma separated activities here" value={activities} onChange={(e) => setActivities(e.target.value)} />
-                                                    <br /><br />
-                                                    <div style={{display: 'flex', gap: '0.5rem'}}>
-                                                        <button onClick={handleSubmit}>Submit</button>
-                                                        <button onClick={handleCancel}>Cancel</button>
-                                                    </div>
-                                                    </>
-                                            :
-                                                    <div style={{textAlign: 'center'}}>
-                                                    <h3>Name: </h3>
-                                                    <p>{name}</p>
-                                                    <h3>Email: </h3>
-                                                    <p>{email}</p>
-                                                    <h3>Activities: </h3>
-                                                    <p>{activities}</p>
-                                                    <button onClick={() => setProfileEdit(true)}>Edit</button>
-                                                    </div>
-                                            }
+                    {isProfileEdit ? (
+                        <>
+                        <h3>First Name: </h3>
+                        <input type="text" name="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                        <h3>Last Name: </h3>
+                        <input type="text" name="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                        <h3>Email: </h3>
+                        <input type="text" name="email" value={email} readOnly />
+                        <h3>Age: </h3>
+                        <input 
+                            type="number" 
+                            name="age" 
+                            value={age} 
+                            onChange={(e) => setAge(e.target.value)}
+                            min="0"
+                            style={{width: '80px'}}
+                        />
+                        <h3>Interests: </h3>
+                        <div style={{marginBottom: '1rem'}}>
+                            <div style={{display: 'flex', gap: '0.5rem', marginBottom: '0.5rem'}}>
+                                <input
+                                    type="text"
+                                    value={newInterest}
+                                    onChange={(e) => setNewInterest(e.target.value)}
+                                    placeholder="Add a new interest"
+                                    style={{flex: 1}}
+                                    onKeyPress={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            addInterest(e);
+                                        }
+                                    }}
+                                />
+                                <button onClick={addInterest}>Add</button>
+                            </div>
+                            <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem'}}>
+                                {interests.map((interest, index) => (
+                                    <div key={index} style={{
+                                        background: '#e0e7ff',
+                                        padding: '0.25rem 0.5rem',
+                                        borderRadius: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}>
+                                        {interest}
+                                        <button
+                                            onClick={() => removeInterest(index)}
+                                            style={{
+                                                border: 'none',
+                                                background: 'none',
+                                                padding: '0 0.25rem',
+                                                cursor: 'pointer',
+                                                color: '#4f46e5'
+                                            }}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div style={{display: 'flex', gap: '0.5rem'}}>
+                            <button onClick={handleSubmit}>Submit</button>
+                            <button onClick={handleCancel}>Cancel</button>
+                        </div>
+                        </>
+                    ) : (
+                        <div style={{textAlign: 'center'}}>
+                        <h3>First Name: </h3>
+                        <p>{firstName}</p>
+                        <h3>Last Name: </h3>
+                        <p>{lastName}</p>
+                        <h3>Email: </h3>
+                        <p>{email}</p>
+                        <h3>Age: </h3>
+                        <p>{age}</p>
+                        <h3>Interests: </h3>
+                        <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center'}}>
+                            {interests.map((interest, index) => (
+                                <div key={index} style={{
+                                    background: '#e0e7ff',
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px'
+                                }}>
+                                    {interest}
+                                </div>
+                            ))}
+                        </div>
+                        <br />
+                        <button onClick={() => setProfileEdit(true)}>Edit</button>
+                        </div>
+                    )}
                 </div>}
             </div>
         </div>
