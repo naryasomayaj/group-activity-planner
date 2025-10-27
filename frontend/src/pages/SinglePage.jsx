@@ -161,9 +161,14 @@ function SinglePage() {
 
     return(
         <>
-        <h1>Group Activity Planner</h1>
-        {isLoggedIn ? (
-        <div className="tabs">
+                <div className="app-header">
+                    <h1>Group Activity Planner</h1>
+                    {isLoggedIn && (
+                        <button className="signout-button" onClick={handleLogout}>Sign Out</button>
+                    )}
+                </div>
+                {isLoggedIn ? (
+                <div className="tabs">
             <div className="tab-headers">
                 <button disabled={activeTab === "tab1"} onClick={() => setActiveTab("tab1")}>
                 Groups
@@ -173,69 +178,66 @@ function SinglePage() {
                 </button>
             </div>
             <div className="tab-content">
-                {activeTab === "tab1" && <div>
-                    <br></br>
-                    <button onClick={createGroup}>Create Group</button>
-                    <button onClick={joinGroup}>Join Group</button>
-                    <input type="text" name="groupJoinID" value={groupJoinID} placeholder="Group ID Code" onChange={(e) => setGroupJoinID(e.target.value)}/>
-                    <h3>My Groups:</h3>
+                {activeTab === "tab1" && <div className="groups-area centered">
+                    <br />
+                    <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center'}}>
+                      <button onClick={createGroup}>Create Group</button>
+                      <button onClick={joinGroup}>Join Group</button>
+                      <input style={{maxWidth: '220px'}} type="text" name="groupJoinID" value={groupJoinID} placeholder="Group ID Code" onChange={(e) => setGroupJoinID(e.target.value)}/>
+                    </div>
+                    <h3 style={{marginTop: '1rem'}}>My Groups:</h3>
+                    <div className="group-list" style={{width: '100%'}}>
                     {groupInfo.map(group => (
                         <details key={group.id}>
                             <summary>{group.name}</summary>
                             {group.events.map(event => (
                                 <details key={event.id}>
-                                    {true ?
-                                        <>
-                                            <summary>{event.name}</summary>
-                                            <p>location: {event.location}</p>
-                                            <p>budget: {event.budget}</p>
-                                            <p>vibe: {event.vibe}</p>
-                                            <button>Edit</button>
-                                            <button onClick={() => joinEvent(group.id)}>Join</button>
-                                        </>
-                                    :
-                                        <>
-                                            <summary>{event.name}</summary>
-                                            <p>location: {event.location}</p>
-                                            <p>budget: {event.budget}</p>
-                                            <p>vibe: {event.vibe}</p>
-                                            <button>Edit</button>
-                                            <button onClick={() => joinEvent(group.id)}>Join</button>
-                                        </>
-                                    }
+                                    <summary>{event.name}</summary>
+                                    <div style={{padding: '0.25rem 0'}}> 
+                                      <p>location: {event.location}</p>
+                                      <p>budget: {event.budget}</p>
+                                      <p>vibe: {event.vibe}</p>
+                                      <div style={{display: 'flex', gap: '0.5rem'}}>
+                                        <button>Edit</button>
+                                        <button onClick={() => joinEvent(group.id)}>Join</button>
+                                      </div>
+                                    </div>
                                 </details>
                             ))}
-                            <button onClick={() => addEvent(group.id)}>Add Event</button>
-                            <button onClick={() => leaveGroup(group.id)}>Leave Group</button>
+                            <div style={{marginTop: '0.5rem', display: 'flex', gap: '0.5rem'}}>
+                              <button onClick={() => addEvent(group.id)}>Add Event</button>
+                              <button onClick={() => leaveGroup(group.id)}>Leave Group</button>
+                            </div>
                         </details>
                     ))}
+                    </div>
                 </div>}
-                {activeTab === "tab2" && <div>
-                    {isProfileEdit ?
-                        <>
-                        <h3>Name: </h3>
-                        <input type="text" name="name" value={name} onChange={(e) => setName(e.target.value)} />
-                        <h3>Email: </h3>
-                        <input type="text" name="email" value={email} readOnly />
-                        <h3>Activities: </h3>
-                        <textarea name="activities" rows="5" cols="40" placeholder="Enter your comma separated activities here" value={activities} onChange={(e) => setActivities(e.target.value)} />
-                        <br></br><br></br>
-                        <button onClick={handleSubmit}>Submit</button>
-                        <button onClick={handleCancel}>Cancel</button>
-                        </>
-                    :
-                        <>
-                        <h3>Name: </h3>
-                        <p>{name}</p>
-                        <h3>Email: </h3>
-                        <p>{email}</p>
-                        <h3>Activities: </h3>
-                        <p>{activities}</p>
-                        <button onClick={() => setProfileEdit(true)}>Edit</button>
-                        </>
-                    }
-                    <br></br><br></br>
-                    <button onClick={handleLogout}>Sign Out</button>
+                {activeTab === "tab2" && <div className="profile-area centered">
+                                    {isProfileEdit ?
+                                                    <>
+                                                    <h3>Name: </h3>
+                                                    <input type="text" name="name" value={name} onChange={(e) => setName(e.target.value)} />
+                                                    <h3>Email: </h3>
+                                                    <input type="text" name="email" value={email} readOnly />
+                                                    <h3>Activities: </h3>
+                                                    <textarea name="activities" rows="5" cols="40" placeholder="Enter your comma separated activities here" value={activities} onChange={(e) => setActivities(e.target.value)} />
+                                                    <br /><br />
+                                                    <div style={{display: 'flex', gap: '0.5rem'}}>
+                                                        <button onClick={handleSubmit}>Submit</button>
+                                                        <button onClick={handleCancel}>Cancel</button>
+                                                    </div>
+                                                    </>
+                                            :
+                                                    <div style={{textAlign: 'center'}}>
+                                                    <h3>Name: </h3>
+                                                    <p>{name}</p>
+                                                    <h3>Email: </h3>
+                                                    <p>{email}</p>
+                                                    <h3>Activities: </h3>
+                                                    <p>{activities}</p>
+                                                    <button onClick={() => setProfileEdit(true)}>Edit</button>
+                                                    </div>
+                                            }
                 </div>}
             </div>
         </div>
