@@ -1,0 +1,44 @@
+/* Login / Signup shared form styles */
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    align-items: flex-start;
+    margin: 0.25rem 0;
+}
+
+.login-form-line {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    width: 100%;
+}
+
+.login-form-line label {
+    min-width: 72px;
+    text-align: right;
+    color: #374151;
+    font-weight: 600;
+}
+
+.login-form-line input {
+    flex: 1 1 auto;
+    max-width: 380px;
+    padding: 0.45rem 0.6rem;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+}
+
+.login-form button[type="submit"] {
+    background: #4f46e5;
+    color: #fff;
+    border: none;
+    padding: 0.45rem 0.75rem;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+@media (max-width: 600px) {
+    .login-form-line { flex-direction: column; align-items: stretch; }
+    .login-form-line label { text-align: left; min-width: auto; }
+}

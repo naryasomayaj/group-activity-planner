@@ -1,31 +1,14 @@
-import { createUserWithEmailAndPassword, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth'
-import { auth } from './firebase'
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import './App.css'
+/* Simplified version of the frontend written by Ben */
+/* Originally, I wrote a fancier frontend, but this should be clearer for others to work with */
 
-import LoginForm from './components/LoginForm';
-import SignupForm from './components/SignUpForm';
+import SinglePage from './pages/SinglePage.jsx'
 
 function App() {
-
-  const handleCreateUser = async () => {
-    const result = await createUserWithEmailAndPassword(auth, );
-
-    await sendEmailVerification(result.user);
-  }
-
-  const handleSignIn = async () => {
-    const result = await SignInWithEmailAndPassword(auth, )
-  }
-
   return (
     <>
-      <div>
-        <h1>Test Form</h1>
-        <h2>Sign Up</h2>
-        <SignupForm />
-        <h2>Login</h2>
-        <LoginForm />
-      </div>
+      <SinglePage />
     </>
   )
 }
