@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { auth, db } from '../firebase';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, setDoc } from 'firebase/firestore';
 import LoginForm from '../components/LoginForm';
 import SignupForm from '../components/SignUpForm';
 
@@ -25,9 +25,15 @@ function SinglePage() {
     const [age, setAge] = useState("");
     const [interests, setInterests] = useState([]);
     const [newInterest, setNewInterest] = useState("");
-    const [groupJoinID, setGroupJoinID] = useState("");
     const [groupInfo, setGroupInfo] = useState([]);
-
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [newGroupName, setNewGroupName] = useState("");
+    const [visibleAccessCodes, setVisibleAccessCodes] = useState(new Set());
+    const [openedGroups, setOpenedGroups] = useState(new Set());
+    const [toast, setToast] = useState({ message: '', type: '', visible: false });
+    const [showJoinModal, setShowJoinModal] = useState(false);
+    const [joinAccessCode, setJoinAccessCode] = useState("");
+    
     let loginElement;
 
     useEffect(() => {
@@ -111,63 +117,184 @@ function SinglePage() {
         }
     }
 
-    const fetchGroups = () => {
-        /* This function must fetch the user's groups from the database and set the group info accordingly */
+    const fetchGroups = async () => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
 
-        setGroupInfo([
-            {
-                name: "Group 1",
-                members: ["Example member1", "Example member2"],
-                events: [{name: "Getting food somewhere",
-                          id: 1,
-                          location: "Amherst",
-                          budget: "$0",
-                          vibe: "outdoors",},
-                         {name: "After class study break",
-                          id: 2,
-                          location: "Amherst",
-                          budget: "$30",
-                          vibe: "outdoors",},
-                ],
-                admin: "Example member1",
-                id: 1,
-            },
-            {
-                name: "Group 2",
-                members: ["Example member1"],
-                events: [{name: "Event 3",
-                          id: 3,
-                          location: "Amherst",
-                          budget: "$40",
-                          vibe: "outdoors",},],
-                admin: "Example member1",
-                id: 2,
-            },
-        ]);
-
-       console.log("Fetch groups!");
+            const userDocRef = doc(db, 'Users', user.uid);
+            const userDoc = await getDoc(userDocRef);
+            
+            if (!userDoc.exists()) return;
+            
+            const userData = userDoc.data();
+            const userGroups = userData.userGroups || [];
+            
+            const groupPromises = userGroups.map(groupId => 
+                getDoc(doc(db, 'Groups', groupId))
+            );
+            
+            const groupDocs = await Promise.all(groupPromises);
+            const groups = groupDocs
+                .filter(doc => doc.exists())
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    events: doc.data().events || []
+                }));
+            
+            setGroupInfo(groups);
+        } catch (error) {
+            console.error("Error fetching groups:", error);
+        }
     }
 
-    const createGroup = () => {
-        /* This function must create a group with a new group ID and place the user in that group */
+    const generateAccessCode = () => {
+        return Math.random().toString(36).substring(2, 8).toUpperCase();
+    }
 
-        setGroupInfo(previous => [...previous,
-            {
-                name: "New Group",
-                members: ["Example member1",],
-                events: [{name: "Event 1"},],
-                admin: "Example member1",
-                id: 3,
+    const createGroup = async () => {
+        try {
+            const user = auth.currentUser;
+            if (!user || !newGroupName.trim()) return;
+
+            // Generate a unique access code (avoid collisions in AccessCodes collection)
+            let accessCode = '';
+            const maxAttempts = 5;
+            for (let i = 0; i < maxAttempts; i++) {
+                const candidate = generateAccessCode();
+                const existing = await getDoc(doc(db, 'AccessCodes', candidate));
+                if (!existing.exists()) {
+                    accessCode = candidate;
+                    break;
+                }
             }
-        ]);
+            if (!accessCode) {
+                // fallback to timestamp-based code if collision keeps happening
+                accessCode = (Date.now().toString(36)).slice(-6).toUpperCase();
+            }
+
+            // Create new group document
+            const groupsCollection = collection(db, 'Groups');
+            const newGroupRef = await addDoc(groupsCollection, {
+                name: newGroupName.trim(),
+                accessCode: accessCode,
+                createdAt: new Date().toISOString(),
+                createdBy: user.uid,
+                members: [user.uid],
+                events: []
+            });
+
+            // Map access code -> group id in AccessCodes collection
+            await setDoc(doc(db, 'AccessCodes', accessCode), {
+                groupId: newGroupRef.id,
+                createdAt: new Date().toISOString()
+            });
+
+            // Update user's groups list
+            const userDocRef = doc(db, 'Users', user.uid);
+            await updateDoc(userDocRef, {
+                userGroups: arrayUnion(newGroupRef.id)
+            });
+
+            // Reset form and close modal
+            setNewGroupName('');
+            setShowCreateModal(false);
+
+            // Refresh groups list
+            await fetchGroups();
+
+        } catch (error) {
+            console.error("Error creating group:", error);
+        }
     }
 
-    const joinGroup = async () => {
-        /* This function must join a group specified in groupID */
+    const joinGroup = async (code) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const codeToUse = (code || joinAccessCode || '').trim().toUpperCase();
+            if (!codeToUse) {
+                showToast('Please enter an access code', 'error');
+                return;
+            }
+
+            // Look up the AccessCodes collection for this code
+            const accessDocRef = doc(db, 'AccessCodes', codeToUse);
+            const accessDoc = await getDoc(accessDocRef);
+            if (!accessDoc.exists()) {
+                showToast('Access code not found', 'error');
+                return;
+            }
+
+            const { groupId } = accessDoc.data();
+            if (!groupId) {
+                showToast('Invalid access code mapping', 'error');
+                return;
+            }
+
+            // Prevent joining same group twice (check current loaded groups)
+            if (groupInfo.some(g => g.id === groupId)) {
+                showToast('You are already a member of this group', 'error');
+                // close modal
+                setJoinAccessCode('');
+                setShowJoinModal(false);
+                return;
+            }
+
+            // Add the group to the user's userGroups array
+            const userDocRef = doc(db, 'Users', user.uid);
+            await updateDoc(userDocRef, {
+                userGroups: arrayUnion(groupId)
+            });
+
+            // Add the user to the group's members array
+            const groupDocRef = doc(db, 'Groups', groupId);
+            await updateDoc(groupDocRef, {
+                members: arrayUnion(user.uid)
+            });
+
+            // Reset and close modal, refresh groups
+            setJoinAccessCode('');
+            setShowJoinModal(false);
+            await fetchGroups();
+
+            // Auto-open the group's details and show success toast
+            setOpenedGroups(prev => {
+                const newSet = new Set(prev);
+                newSet.add(groupId);
+                return newSet;
+            });
+            showToast('Joined group successfully', 'success');
+        } catch (error) {
+            console.error('Error joining group:', error);
+            showToast('Error joining group', 'error');
+        }
     }
 
-    const leaveGroup = (id) => {
-        /* This function should leave a group specified in groupID */
+    const leaveGroup = async (groupId) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            // Remove groupId from user's userGroups
+            const userDocRef = doc(db, 'Users', user.uid);
+            await updateDoc(userDocRef, {
+                userGroups: arrayRemove(groupId)
+            });
+
+            // Remove user from group's members
+            const groupDocRef = doc(db, 'Groups', groupId);
+            await updateDoc(groupDocRef, {
+                members: arrayRemove(user.uid)
+            });
+
+            // Refresh groups list
+            await fetchGroups();
+        } catch (error) {
+            console.error('Error leaving group:', error);
+        }
     }
 
     const addEvent = (id) => {
@@ -213,6 +340,23 @@ function SinglePage() {
         setInterests(interests.filter((_, index) => index !== indexToRemove));
     }
 
+    const toggleAccessCode = (groupId) => {
+        setVisibleAccessCodes(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(groupId)) {
+                newSet.delete(groupId);
+            } else {
+                newSet.add(groupId);
+            }
+            return newSet;
+        });
+    }
+
+    const showToast = (message, type = 'info', duration = 3000) => {
+        setToast({ message, type, visible: true });
+        setTimeout(() => setToast({ message: '', type: '', visible: false }), duration);
+    }
+
     return(
         <>
                 <div className="app-header">
@@ -221,6 +365,21 @@ function SinglePage() {
                         <button className="signout-button" onClick={handleLogout}>Sign Out</button>
                     )}
                 </div>
+                {/* Toast */}
+                {toast.visible && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 84,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: toast.type === 'success' ? '#16a34a' : (toast.type === 'error' ? '#ef4444' : '#111827'),
+                        color: 'white',
+                        padding: '0.6rem 1rem',
+                        borderRadius: 8,
+                        boxShadow: '0 6px 18px rgba(0,0,0,0.12)',
+                        zIndex: 2000
+                    }}>{toast.message}</div>
+                )}
                 {isLoggedIn ? (
                 <div className="tabs">
             <div className="tab-headers">
@@ -235,15 +394,139 @@ function SinglePage() {
                 {activeTab === "tab1" && <div className="groups-area centered">
                     <br />
                     <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center'}}>
-                      <button onClick={createGroup}>Create Group</button>
-                      <button onClick={joinGroup}>Join Group</button>
-                      <input style={{maxWidth: '220px'}} type="text" name="groupJoinID" value={groupJoinID} placeholder="Group ID Code" onChange={(e) => setGroupJoinID(e.target.value)}/>
+                      <button onClick={() => setShowCreateModal(true)}>Create Group</button>
+                      <button onClick={() => setShowJoinModal(true)}>Join Group</button>
                     </div>
+
+                    {showCreateModal && (
+                        <div style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(0,0,0,0.5)',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            zIndex: 1000
+                        }}>
+                            <div style={{
+                                background: 'white',
+                                padding: '2rem',
+                                borderRadius: '8px',
+                                maxWidth: '400px',
+                                width: '90%'
+                            }}>
+                                <h3 style={{marginTop: 0}}>Create New Group</h3>
+                                <div style={{marginBottom: '1rem'}}>
+                                    <label htmlFor="groupName">Group Name:</label>
+                                    <input
+                                        type="text"
+                                        id="groupName"
+                                        value={newGroupName}
+                                        onChange={(e) => setNewGroupName(e.target.value)}
+                                        style={{width: '100%', marginTop: '0.5rem'}}
+                                    />
+                                </div>
+                                <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
+                                    <button onClick={() => setShowCreateModal(false)}>Cancel</button>
+                                    <button 
+                                        onClick={createGroup}
+                                        disabled={!newGroupName.trim()}
+                                        style={{
+                                            backgroundColor: !newGroupName.trim() ? '#ccc' : '#4f46e5'
+                                        }}
+                                    >
+                                        Create
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showJoinModal && (
+                        <div style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(0,0,0,0.5)',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            zIndex: 1000
+                        }}>
+                            <div style={{
+                                background: 'white',
+                                padding: '1.5rem',
+                                borderRadius: '8px',
+                                maxWidth: '380px',
+                                width: '90%'
+                            }}>
+                                <h3 style={{marginTop: 0}}>Join Group</h3>
+                                <div style={{marginBottom: '1rem'}}>
+                                    <label htmlFor="joinCode">Access Code:</label>
+                                    <input
+                                        id="joinCode"
+                                        type="text"
+                                        value={joinAccessCode}
+                                        onChange={(e) => setJoinAccessCode(e.target.value)}
+                                        style={{width: '100%', marginTop: '0.5rem'}}
+                                        onKeyPress={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                joinGroup();
+                                            }
+                                        }}
+                                    />
+                                </div>
+                                <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
+                                    <button onClick={() => { setShowJoinModal(false); setJoinAccessCode(''); }}>Cancel</button>
+                                    <button onClick={() => joinGroup()} style={{backgroundColor: joinAccessCode.trim() ? '#4f46e5' : '#ccc'}} disabled={!joinAccessCode.trim()}>Join</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <h3 style={{marginTop: '1rem'}}>My Groups:</h3>
                     <div className="group-list" style={{width: '100%'}}>
                     {groupInfo.map(group => (
-                        <details key={group.id}>
+                        <details key={group.id} open={openedGroups.has(group.id)}>
                             <summary>{group.name}</summary>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '1rem',
+                                padding: '0.5rem 0',
+                                borderBottom: '1px solid #eef2ff',
+                                marginBottom: '0.5rem'
+                            }}>
+                                <button 
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        toggleAccessCode(group.id);
+                                    }}
+                                    style={{
+                                        fontSize: '0.9rem',
+                                        padding: '0.3rem 0.6rem'
+                                    }}
+                                >
+                                    {visibleAccessCodes.has(group.id) ? 'Hide Access Code' : 'Show Access Code'}
+                                </button>
+                                {visibleAccessCodes.has(group.id) && (
+                                    <div style={{
+                                        background: '#f3f4f6',
+                                        padding: '0.3rem 0.6rem',
+                                        borderRadius: '4px',
+                                        fontFamily: 'monospace',
+                                        fontSize: '0.9rem'
+                                    }}>
+                                        Access Code: {group.accessCode}
+                                    </div>
+                                )}
+                            </div>
                             {group.events.map(event => (
                                 <details key={event.id}>
                                     <summary>{event.name}</summary>
