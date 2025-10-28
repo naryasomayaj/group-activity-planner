@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { auth, db } from '../firebase';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, setDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, setDoc, runTransaction} from 'firebase/firestore';
 import LoginForm from '../components/LoginForm';
 import SignupForm from '../components/SignUpForm';
 
@@ -277,19 +277,36 @@ function SinglePage() {
         try {
             const user = auth.currentUser;
             if (!user) return;
+            const groupRef = doc(db, 'Groups', groupId);
+            const userRef  = doc(db, 'Users', user.uid);
+            await runTransaction(db, async (tx) => {
+             const groupSnap = await tx.get(groupRef);
+             if (!groupSnap.exists()) return;
 
-            // Remove groupId from user's userGroups
-            const userDocRef = doc(db, 'Users', user.uid);
-            await updateDoc(userDocRef, {
-                userGroups: arrayRemove(groupId)
-            });
+             const data = groupSnap.data();
+             const members = Array.isArray(data.members) ? data.members : [];
+             if (!members.includes(user.uid)) {
+                 // Still ensure user's doc is cleaned up, just in case.
+                 tx.update(userRef, { userGroups: arrayRemove(groupId) });
+                 return;
+             }
+             const newMembers = members.filter(m => m !== user.uid);
+             // Always unlink group from the user
+             tx.update(userRef, { userGroups: arrayRemove(groupId) });
 
-            // Remove user from group's members
-            const groupDocRef = doc(db, 'Groups', groupId);
-            await updateDoc(groupDocRef, {
-                members: arrayRemove(user.uid)
-            });
-
+             if (newMembers.length > 0) {
+                 // Others remain → remove this user only
+                 tx.update(groupRef, { members: arrayRemove(user.uid) });
+             } else {
+                 // Last member → delete group and free access code
+                 const accessCode = data.accessCode;
+                 tx.delete(groupRef);
+                 if (accessCode) {
+                     const acRef = doc(db, 'AccessCodes', accessCode);
+                     tx.delete(acRef);
+                 }
+             }
+         });
             // Refresh groups list
             await fetchGroups();
         } catch (error) {
