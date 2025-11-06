@@ -297,17 +297,39 @@ function SinglePage() {
         }
     }
 
-    const addEvent = (id) => {
+    const addEvent = async (id) => {
         /* This function should add an event to the specified group */
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
 
+            let emptyEvent = {name: "New Event",
+                          createdAt: new Date().toISOString(),
+                          id: 3,
+                          location: "Amherst",
+                          budget: "$40",
+                          vibe: "outdoors",
+                          members: [],}
+
+            // Add the event to the group specified by id
+            const userDocRef = doc(db, 'Groups', id);
+            await updateDoc(userDocRef, {
+                events: arrayUnion(emptyEvent)
+            });
+
+            await fetchGroups();
+
+        } catch (error) {
+            console.error("Error adding event:", error);
+        }
     }
 
-    const joinEvent = (id) => {
+    const joinEvent = async (groupId, eventid) => {
         /* This function should join an event specified by an event id */
 
     }
 
-    const leaveEvent = (id) => {
+    const leaveEvent = (groupId, eventId) => {
         /* This function should leave an event specified by an event id */
 
     }
@@ -536,7 +558,7 @@ function SinglePage() {
                                       <p>vibe: {event.vibe}</p>
                                       <div style={{display: 'flex', gap: '0.5rem'}}>
                                         <button>Edit</button>
-                                        <button onClick={() => joinEvent(group.id)}>Join</button>
+                                        <button onClick={() => joinEvent(group.id, event.id)}>Join</button>
                                       </div>
                                     </div>
                                 </details>
