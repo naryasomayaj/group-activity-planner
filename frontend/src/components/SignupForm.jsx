@@ -8,6 +8,7 @@ import './LoginForm.css'
 function SignupForm() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [errorMessage,setErrorMessage]=useState("");
 
     const handleSignup = async (e) => {
         e.preventDefault();
@@ -15,6 +16,7 @@ function SignupForm() {
             // Create the authentication account
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             console.log('Created account with email: ', userCredential.user);
+            setErrorMessage("");
             
             // Create a document in the Users collection
             const userDocRef = doc(db, 'Users', userCredential.user.uid);
@@ -27,6 +29,18 @@ function SignupForm() {
             console.log('Created user document in Firestore');
         } catch (error) {
             console.error(error.message);
+            let msg ="Kindly Try Again.";
+            if (error?.code === "auth/email-already-in-use") {
+                msg = "That email is already in use. Try logging in or use a different email.";
+            } else if (error?.code === "auth/invalid-email") {
+                msg = "Please enter a valid email address.";
+            } else if (error?.code === "auth/weak-password") {
+                msg = "Password should be atleast 6+ characters";
+            } else if (error?.code === "auth/network-request-failed") {
+                msg = "Network error. Please check your connection and try again.";
+            }
+            setErrorMessage(msg);
+            window.alert(msg);
         }
     };
 
