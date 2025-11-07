@@ -11,10 +11,11 @@ import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, setDoc, runTransaction} from 'firebase/firestore';
 import LoginForm from '../components/LoginForm';
 import SignupForm from '../components/SignUpForm';
+import { generateActivityIdeas } from "../ai/geminiClient.js";
 
 function SinglePage() {
     const auth = getAuth();
-    const [isLoading, setLoading] = useState(true);
+    const [llmBusy, setLlmBusy] = useState(new Set());
     const [isLoggedIn, setLoggedIn] = useState(false);
     const [loginStep, setLoginStep] = useState(0);
     const [activeTab, setActiveTab] = useState("tab1");
@@ -33,13 +34,24 @@ function SinglePage() {
     const [toast, setToast] = useState({ message: '', type: '', visible: false });
     const [showJoinModal, setShowJoinModal] = useState(false);
     const [joinAccessCode, setJoinAccessCode] = useState("");
-    
+    const [isEditingEvent, setIsEditingEvent] = useState(false);
+    const [editingEventId, setEditingEventId] = useState(null);
+    const [mode, setMode] = useState(null); 
+    const [vibeDraft, setVibeDraft] = useState("");
+    const [userCache, setUserCache] = useState({});
+    // Add-event modal & form state
+    const [showEventModal, setShowEventModal] = useState(false);
+    const [eventGroupId, setEventGroupId] = useState(null);
+    const [eventForm, setEventForm] = useState({
+    name: "",
+    location: "",
+    budget: "",        // keep as string while typing; parse on save
+    vibes: [],         // array of strings (tags)
+    });
     let loginElement;
 
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged(user => {
-            setLoading(false)
-            
             if(user) {
                 fetchData();
                 fetchGroups();
@@ -117,6 +129,13 @@ function SinglePage() {
         }
     }
 
+    const nameOf = (uid) => {
+        const u = userCache[uid];
+        if (!u) return uid; // fallback
+        const n = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+        return n || u.email || uid;
+        };
+
     const fetchGroups = async () => {
         try {
             const user = auth.currentUser;
@@ -144,6 +163,40 @@ function SinglePage() {
                 }));
             
             setGroupInfo(groups);
+            try {
+                const uidSet = new Set();
+                groups.forEach(g => {
+                    (g.members || []).forEach(u => uidSet.add(u));
+                    (g.events || []).forEach(ev => {
+                    const prefs = ev.preferences || {};
+                    Object.keys(prefs).forEach(u => uidSet.add(u));
+                    (ev.participants || []).forEach(u => uidSet.add(u));
+                    });
+                });
+
+                const missing = [...uidSet].filter(u => !userCache[u]);
+                if (missing.length) {
+                    const docs = await Promise.all(missing.map(u => getDoc(doc(db, 'Users', u))));
+                    const updates = {};
+                    docs.forEach((d, i) => {
+                    const uid = missing[i];
+                    if (d.exists()) {
+                        const ud = d.data();
+                        updates[uid] = {
+                        firstName: ud.firstName || '',
+                        lastName: ud.lastName || '',
+                        email: ud.email || ''
+                        };
+                    } else {
+                        updates[uid] = { firstName: '', lastName: '', email: '' };
+                    }
+                    });
+                    setUserCache(prev => ({ ...prev, ...updates }));
+                }
+                } catch (e) {
+                console.error('Error preloading user profiles', e);
+                }
+
         } catch (error) {
             console.error("Error fetching groups:", error);
         }
@@ -314,20 +367,361 @@ function SinglePage() {
         }
     }
 
-    const addEvent = (id) => {
+    const resetEventForm = () => {
+        setEventForm({ name: "", location: "", budget: "", vibes: [] });
+        setVibeDraft("");
+        setEventGroupId(null);
+        setMode(null);
+    }
+
+    function buildLLMPrompt(event, groupName, nameOfFn) {
+        const lines = [];
+        lines.push(`You are an assistant that suggests group activity ideas.`);
+        lines.push(`Group: ${groupName || "(unnamed group)"}`);
+        lines.push(`Event name: ${event?.name || "—"}`);
+        lines.push(`Location: ${event?.location || "—"}`);
+       // lines.push(`Participants count: ${(event?.participants || []).length}`);
+        lines.push(`\nParticipant preferences (per user):`);
+
+        const prefs = event?.preferences || {};
+        if (Object.keys(prefs).length === 0) {
+            lines.push(`  (none yet)`);
+        } else {
+            Object.entries(prefs).forEach(([uid, p]) => {
+            const nm = nameOfFn(uid);
+            const budget = (p?.budget ?? "—");
+            const vibes = Array.isArray(p?.vibes) && p.vibes.length ? p.vibes.join(", ") : "—";
+            lines.push(`  - ${nm}: budget=${budget}, vibes=${vibes}`);
+            });
+        }
+
+        lines.push(`
+        Please propose 3–5 concrete, feasible activity ideas that fit the budgets and vibes above.
+        For each idea, include:
+        - Title
+        - Why it fits the group's preferences
+        - Rough cost per person
+        - What to book/bring
+        - 2–3 variations (e.g., cheaper/indoor)
+
+        Return plain text in a readable list.`);
+
+        return lines.join("\n");
+    }
+
+
+
+    const addEvent = async(groupId) => {
         /* This function should add an event to the specified group */
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
 
+            if (!groupId) {
+            showToast('No group selected', 'error');
+            return;
+            }
+
+            const name = (eventForm.name || "").trim();
+            if (!name) {
+            showToast('Please enter an event name', 'error');
+            return;
+            }
+
+            const location = (eventForm.location || "").trim();
+            const budgetNumber = eventForm.budget === "" ? null : Number(eventForm.budget);
+            if (budgetNumber !== null && Number.isNaN(budgetNumber)) {
+            showToast('Budget must be a number', 'error');
+            return;
+            }
+
+            const vibes = (eventForm.vibes || []).map(v => v.trim()).filter(Boolean);
+
+            const groupRef = doc(db, 'Groups', groupId);
+            const groupSnap = await getDoc(groupRef);
+            if (!groupSnap.exists()) {
+            showToast('Group not found', 'error');
+            return;
+            }
+
+            const data = groupSnap.data();
+            const currentEvents = Array.isArray(data.events) ? data.events : [];
+
+            const newEvent = {
+               id: (crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
+               name,
+               location,
+               participants: [user.uid],
+               preferences: {
+                 [user.uid]: {
+                   budget: budgetNumber,           // this user’s budget
+                   vibes,                          // this user’s vibes
+                   updatedAt: new Date().toISOString(),
+                 }
+               },
+               createdBy: user.uid,
+               createdAt: new Date().toISOString(),
+             };
+
+            await updateDoc(groupRef, { events: [...currentEvents, newEvent] });
+
+            showToast('Event created successfully!', 'success');
+            setShowEventModal(false);
+            resetEventForm();
+            await fetchGroups();
+
+            setOpenedGroups(prev => {
+            const s = new Set(prev);
+            s.add(groupId);
+            return s;
+            });
+        } catch (error) {
+            console.error('Error creating event:', error);
+            showToast('Error creating event', 'error');
+        }
     }
 
-    const joinEvent = (id) => {
-        /* This function should join an event specified by an event id */
+    const updateEvent = async (groupId, eventId) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
 
+            if (!groupId || !eventId) { showToast('Missing group or event id', 'error'); return; }
+
+            const name = (eventForm.name || "").trim();
+            if (!name) { showToast('Please enter an event name', 'error'); return; }
+
+            const location = (eventForm.location || "").trim();
+            const budgetNumber = eventForm.budget === "" ? null : Number(eventForm.budget);
+            if (budgetNumber !== null && Number.isNaN(budgetNumber)) {
+            showToast('Budget must be a number', 'error'); return;
+            }
+            const vibes = (eventForm.vibes || []).map(v => v.trim()).filter(Boolean);
+
+            const groupRef = doc(db, 'Groups', groupId);
+            const snap = await getDoc(groupRef);
+            if (!snap.exists()) { showToast('Group not found', 'error'); return; }
+
+            const data = snap.data();
+            const events = Array.isArray(data.events) ? data.events : [];
+            const idx = events.findIndex(e => e.id === eventId);
+            if (idx === -1) { showToast('Event not found', 'error'); return; }
+
+            // Optional: restrict edits to creator only
+            // if (events[idx].createdBy && events[idx].createdBy !== user.uid) {
+            //   showToast('Only the creator can edit this event', 'error'); return;
+            // }
+
+            const updated = {
+            ...events[idx],
+            name,
+            location,
+            updatedAt: new Date().toISOString(),
+            updatedBy: user.uid,
+            };
+
+            const newEvents = [...events];
+            newEvents[idx] = updated;
+
+            await updateDoc(groupRef, { events: newEvents });
+
+            showToast('Event updated!', 'success');
+            setShowEventModal(false);
+            setIsEditingEvent(false);
+            setEditingEventId(null);
+            resetEventForm();
+            setMode(null);
+            await fetchGroups();
+            setOpenedGroups(prev => new Set(prev).add(groupId));
+        } catch (err) {
+            console.error('Error updating event:', err);
+            showToast('Error updating event', 'error');
+        }
     }
 
-    const leaveEvent = (id) => {
+    const updateMyEventPreference = async (groupId, eventId, myBudgetRaw, myVibesArr) => {
+    try {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        const groupRef = doc(db, 'Groups', groupId);
+        const snap = await getDoc(groupRef);
+        if (!snap.exists()) { showToast('Group not found', 'error'); return; }
+
+        const data = snap.data();
+        const events = Array.isArray(data.events) ? data.events : [];
+        const idx = events.findIndex(e => e.id === eventId);
+        if (idx === -1) { showToast('Event not found', 'error'); return; }
+
+        const e = events[idx];
+        const prefs = e.preferences || {};
+        const budgetNumber = myBudgetRaw === "" ? null : Number(myBudgetRaw);
+        if (budgetNumber !== null && Number.isNaN(budgetNumber)) {
+        showToast('Budget must be a number', 'error');
+        return;
+        }
+
+        const cleanedVibes = (myVibesArr || []).map(v => `${v}`.trim()).filter(Boolean);
+
+        prefs[user.uid] = {
+        budget: budgetNumber,
+        vibes: cleanedVibes,
+        updatedAt: new Date().toISOString(),
+        };
+
+        const newEvents = [...events];
+        newEvents[idx] = { ...e, preferences: prefs };
+
+        await updateDoc(groupRef, { events: newEvents });
+        showToast('Saved your preference', 'success');
+        setShowEventModal(false);
+        resetEventForm();
+        await fetchGroups();
+    } catch (err) {
+        console.error('Error saving preference:', err);
+        showToast('Error saving preference', 'error');
+    }
+    };
+
+    const deleteEvent = async (groupId, eventId) => {
+    try {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        const groupRef = doc(db, 'Groups', groupId);
+        const snap = await getDoc(groupRef);
+        if (!snap.exists()) { showToast('Group not found', 'error'); return; }
+
+        const data = snap.data();
+        const events = Array.isArray(data.events) ? data.events : [];
+        const idx = events.findIndex(e => e.id === eventId);
+        if (idx === -1) { showToast('Event not found', 'error'); return; }
+
+        const event = events[idx];
+        if (event.createdBy && event.createdBy !== user.uid) {
+        showToast('Only the creator can delete this event', 'error');
+        return;
+        }
+
+        const newEvents = events.filter(e => e.id !== eventId);
+        await updateDoc(groupRef, { events: newEvents });
+
+        showToast('Event deleted', 'success');
+        await fetchGroups();
+        setOpenedGroups(prev => new Set(prev).add(groupId));
+    } catch (err) {
+        console.error('Error deleting event:', err);
+        showToast('Error deleting event', 'error');
+    }
+    };
+
+    const joinEvent = async (groupId, eventId) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const groupRef = doc(db, 'Groups', groupId);
+            const snap = await getDoc(groupRef);
+            if (!snap.exists()) { showToast('Group not found', 'error'); return; }
+
+            const data = snap.data();
+            const events = Array.isArray(data.events) ? data.events : [];
+            const idx = events.findIndex(e => e.id === eventId);
+            if (idx === -1) { showToast('Event not found', 'error'); return; }
+
+            const event = events[idx];
+            const participants = Array.isArray(event.participants) ? event.participants : [];
+            const prefs = event.preferences || {}; // <-- define prefs from event
+
+            if (participants.includes(user.uid)) {
+            showToast('You already joined this event', 'info');
+            return;
+            }
+
+            // ensure the user has a preference stub
+            const newPrefs = {
+            ...prefs,
+            [user.uid]: prefs[user.uid] ?? {
+                budget: null,
+                vibes: [],
+                updatedAt: new Date().toISOString(),
+            },
+            };
+
+            const updatedEvent = {
+            ...event,
+            participants: [...participants, user.uid],
+            preferences: newPrefs,
+            };
+
+            const newEvents = [...events];
+            newEvents[idx] = updatedEvent;
+
+            await updateDoc(groupRef, { events: newEvents });
+
+            showToast('Joined event successfully!', 'success');
+            await fetchGroups();
+        } catch (error) {
+            console.error('Error joining event:', error);
+            showToast('Error joining event', 'error');
+        }
+        };
+
+
+
+    const leaveEvent = async (groupId, eventId) => {
         /* This function should leave an event specified by an event id */
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const groupRef = doc(db, 'Groups', groupId);
+            const groupSnap = await getDoc(groupRef);
+            if (!groupSnap.exists()) {
+                showToast('Group not found', 'error');
+                return;
+            }
+
+            const data = groupSnap.data();
+            const events = Array.isArray(data.events) ? data.events : [];
+            const idx = events.findIndex(e => e.id === eventId);
+            if (idx === -1) {
+                showToast('Event not found', 'error');
+                return;
+            }
+
+            const event = events[idx];
+            const participants = Array.isArray(event.participants) ? event.participants : [];
+
+            if (participants.includes(user.uid)) {
+                const updatedEvent = { ...event, participants: participants.filter(p => p !== user.uid) };
+                const newEvents = [...events];
+                newEvents[idx] = updatedEvent;
+                await updateDoc(groupRef, { events: newEvents });
+            }
+
+            showToast('Left event successfully!', 'success');
+            await fetchGroups();
+    } catch (error) {
+        console.error('Error leaving event:', error);
+        showToast('Error leaving event', 'error');
+    }
 
     }
+
+    const addVibe = (e) => {
+        e?.preventDefault?.();
+        const v = (vibeDraft || "").trim();
+        if (!v) return;
+        setEventForm(prev => ({ ...prev, vibes: [...(prev.vibes || []), v] }));
+        setVibeDraft("");
+        };
+
+    const removeVibe = (idx) => {
+        setEventForm(prev => ({ ...prev, vibes: (prev.vibes || []).filter((_, i) => i !== idx) }));
+        };
+
+
 
     const handleSubmit = async (e) => {
         try {
@@ -368,6 +762,62 @@ function SinglePage() {
             return newSet;
         });
     }
+    const generateForEvent = async (groupId, eventId) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            // find the event in local state
+            const group = groupInfo.find(g => g.id === groupId);
+            if (!group) { showToast('Group not found', 'error'); return; }
+            const evIdx = (group.events || []).findIndex(e => e.id === eventId);
+            if (evIdx === -1) { showToast('Event not found', 'error'); return; }
+            const event = group.events[evIdx];
+
+            // mark busy
+            setLlmBusy(prev => new Set(prev).add(eventId));
+
+            // build prompt & call Gemini
+            const promptText = buildLLMPrompt(event, group.name, nameOf);
+            const text = await generateActivityIdeas(promptText);
+
+            // write result back onto the event: aiResult = { text, prompt, updatedAt }
+            const groupRef = doc(db, 'Groups', groupId);
+            const snap = await getDoc(groupRef);
+            if (!snap.exists()) { showToast('Group not found', 'error'); return; }
+            const data = snap.data();
+            const events = Array.isArray(data.events) ? data.events : [];
+            const idx = events.findIndex(e => e.id === eventId);
+            if (idx === -1) { showToast('Event not found', 'error'); return; }
+
+            const updatedEvent = {
+            ...events[idx],
+            aiResult: {
+                text: text || "(no output)",
+                prompt: promptText,
+                updatedAt: new Date().toISOString(),
+            },
+            };
+            const newEvents = [...events];
+            newEvents[idx] = updatedEvent;
+
+            await updateDoc(groupRef, { events: newEvents });
+
+            // refresh view
+            await fetchGroups();
+            showToast('Ideas generated!', 'success');
+        } catch (e) {
+            console.error('LLM generation failed:', e);
+            showToast(e?.message || 'Generation failed', 'error');
+        } finally {
+            setLlmBusy(prev => {
+            const s = new Set(prev);
+            s.delete(eventId);
+            return s;
+            });
+        }
+    };
+
 
     const showToast = (message, type = 'info', duration = 3000) => {
         setToast({ message, type, visible: true });
@@ -507,6 +957,115 @@ function SinglePage() {
                         </div>
                     )}
 
+                    {showEventModal && (
+                        <div style={{
+                            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+                            display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+                        }}>
+                            <div style={{
+                            background: 'white', padding: '1.5rem', borderRadius: 8,
+                            width: 'min(520px, 92%)'
+                            }}>
+                            <h3 style={{ marginTop: 0 }}>{isEditingEvent ? 'Edit Event' : 'Create Event'}</h3>
+
+                            <label style={{ display: 'block', marginTop: 8 }}>Name</label>
+                            <input
+                                type="text"
+                                value={eventForm.name}
+                                onChange={(e) => setEventForm(prev => ({ ...prev, name: e.target.value }))}
+                                style={{ width: '100%' }}
+                            />
+
+                            <label style={{ display: 'block', marginTop: 12 }}>Location</label>
+                            <input
+                                type="text"
+                                value={eventForm.location}
+                                onChange={(e) => setEventForm(prev => ({ ...prev, location: e.target.value }))}
+                                style={{ width: '100%' }}
+                            />
+
+                            <label style={{ display: 'block', marginTop: 12 }}>Budget</label>
+                            <input
+                                type="number"
+                                min="0" step="1"
+                                value={eventForm.budget}
+                                onChange={(e) => setEventForm(prev => ({ ...prev, budget: e.target.value }))}
+                                style={{ width: 160 }}
+                            />
+
+                            <label style={{ display: 'block', marginTop: 12 }}>Vibes</label>
+                                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                                <input
+                                    type="text"
+                                    placeholder="e.g., chill, outdoors, foodie"
+                                    value={vibeDraft}
+                                    onChange={(e) => setVibeDraft(e.target.value)}
+                                    onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); addVibe(); }
+                                    }}
+                                    style={{ flex: 1 }}
+                                />
+                                <button onClick={addVibe}>Add</button>
+                                </div>
+
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                {(eventForm.vibes || []).map((v, i) => (
+                                    <div key={`${v}-${i}`} style={{
+                                    background: '#e0e7ff',
+                                    padding: '4px 8px',
+                                    borderRadius: 4,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6
+                                    }}>
+                                    {v}
+                                    <button
+                                        onClick={() => removeVibe(i)}
+                                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#4f46e5' }}
+                                        title="Remove"
+                                    >
+                                        ×
+                                    </button>
+                                    </div>
+
+                                    
+                                ))}
+                            </div>
+
+
+                            
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                            <button onClick={() => {
+                                setShowEventModal(false);
+                                setIsEditingEvent(false);
+                                setEditingEventId(null);
+                                resetEventForm();
+                            }}>
+                                Cancel
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                if (mode === 'myPref') {
+                                    updateMyEventPreference(eventGroupId, editingEventId, eventForm.budget, eventForm.vibes);
+                                    } else if (isEditingEvent) {
+                                    updateEvent(eventGroupId, editingEventId);
+                                    } else {
+                                    addEvent(eventGroupId);
+                                    }
+                                }}
+                                disabled={!eventForm.name.trim() || !eventGroupId}
+                                style={{ background: (!eventForm.name.trim() || !eventGroupId) ? '#ccc' : '#4f46e5' }}
+                            >
+                                {mode === 'myPref' ? 'Save My Preference' : (isEditingEvent ? 'Save Changes' : 'Create')}
+                            </button>
+                            </div>
+                            </div>
+                        </div>
+                    )}
+
+
                     <h3 style={{marginTop: '1rem'}}>My Groups:</h3>
                     <div className="group-list" style={{width: '100%'}}>
                     {groupInfo.map(group => (
@@ -544,22 +1103,109 @@ function SinglePage() {
                                     </div>
                                 )}
                             </div>
-                            {group.events.map(event => (
-                                <details key={event.id}>
+                            {group.events.map(event => {
+                                const isParticipant = Array.isArray(event.participants) && auth.currentUser && event.participants.includes(auth.currentUser.uid);
+                                const amCreator = auth.currentUser && event.createdBy === auth.currentUser.uid;
+
+                                return (
+                                    <details key={event.id}>
                                     <summary>{event.name}</summary>
                                     <div style={{padding: '0.25rem 0'}}> 
-                                      <p>location: {event.location}</p>
-                                      <p>budget: {event.budget}</p>
-                                      <p>vibe: {event.vibe}</p>
-                                      <div style={{display: 'flex', gap: '0.5rem'}}>
-                                        <button>Edit</button>
-                                        <button onClick={() => joinEvent(group.id)}>Join</button>
-                                      </div>
+                                        <p>location: {event.location || '—'}</p>
+
+                                        <div style={{ marginTop: 8 }}>
+                                        <strong>Preferences:</strong>
+                                        <div style={{ marginTop: 6 }}>
+                                            {event.preferences && Object.keys(event.preferences).length > 0 ? (
+                                            Object.entries(event.preferences).map(([uid, p]) => (
+                                                <div key={uid} style={{ marginBottom: 4 }}>
+                                                <span style={{ fontWeight: 600 }}>{nameOf(uid)}:</span>{' '}
+                                                <span>budget: {p?.budget ?? '—'}</span>{' '}
+                                                <span>• vibes: {Array.isArray(p?.vibes) && p.vibes.length ? p.vibes.join(', ') : '—'}</span>
+                                                </div>
+                                            ))
+                                            ) : (
+                                            <em>No preferences yet</em>
+                                            )}
+                                        </div>
+                                        </div>
+
+                                        {event.aiResult?.text && (
+                                        <div style={{ marginTop: 12 }}>
+                                            <strong>AI Suggestions:</strong>
+                                            <pre
+                                            style={{
+                                                whiteSpace: 'pre-wrap',
+                                                wordBreak: 'break-word',
+                                                background: '#f8f8f8',
+                                                padding: 12,
+                                                borderRadius: 8
+                                            }}
+                                            >
+                                            {event.aiResult.text}
+                                            </pre>
+                                        </div>
+                                        )}
+
+                                        <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+                                        {!isParticipant ? (
+                                            <button onClick={() => joinEvent(group.id, event.id)}>Join</button>
+                                        ) : (
+                                            <button onClick={() => leaveEvent(group.id, event.id)}>Leave</button>
+                                        )}
+
+                                        <button
+                                        onClick={() => {
+                                            const my = (event.preferences && event.preferences[auth.currentUser?.uid]) || {};
+                                            setEventForm({
+                                            name: event.name || "",
+                                            location: event.location || "",
+                                            budget: (my.budget ?? "") === null ? "" : (my.budget ?? ""),
+                                            vibes: Array.isArray(my.vibes) ? my.vibes : [],
+                                            });
+                                            setVibeDraft("");
+                                            setEventGroupId(group.id);
+                                            setEditingEventId(event.id);
+                                            setIsEditingEvent(false);
+                                            setShowEventModal(true);
+                                            setMode('myPref');  // IMPORTANT: saves via updateMyEventPreference
+                                        }}
+                                        >
+                                        Edit My Preference
+                                        </button>
+
+                                        {amCreator && (
+                                            <button
+                                            onClick={() => deleteEvent(group.id, event.id)}
+                                            style={{ background: '#ef4444', color: '#fff' }}
+                                            >
+                                            Delete
+                                            </button>
+                                        )}
+
+                                        <button
+                                            onClick={() => generateForEvent(group.id, event.id)}
+                                            disabled={llmBusy.has(event.id)}
+                                            >
+                                            {llmBusy.has(event.id) ? 'Generating…' : 'Generate ideas'}
+                                        </button>
+                                        </div>
                                     </div>
-                                </details>
-                            ))}
+                                    </details>
+                                );
+                                })}
+
                             <div style={{marginTop: '0.5rem', display: 'flex', gap: '0.5rem'}}>
-                              <button onClick={() => addEvent(group.id)}>Add Event</button>
+                              <button onClick={() => {
+                                resetEventForm();
+                                setIsEditingEvent(false);
+                                setEditingEventId(null);
+                                setEventGroupId(group.id);
+                                setShowEventModal(true);
+                                setMode('event');
+                                }}>
+                                Add Event
+                                </button>
                               <button onClick={() => leaveGroup(group.id)}>Leave Group</button>
                             </div>
                         </details>
