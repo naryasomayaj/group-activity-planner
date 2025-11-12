@@ -11,6 +11,7 @@ import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, setDoc, runTransaction} from 'firebase/firestore';
 import LoginForm from '../components/LoginForm';
 import SignupForm from '../components/SignUpForm';
+import ActivitiesViewer from '../components/ActivitiesViewer.jsx';
 import { generateActivityIdeas } from "../ai/geminiClient.js";
 
 function SinglePage() {
@@ -397,14 +398,20 @@ function SinglePage() {
 
         lines.push(`
         Please propose 3–5 concrete, feasible activity ideas that fit the budgets and vibes above.
-        For each idea, include:
-        - Title
-        - Why it fits the group's preferences
-        - Rough cost per person
-        - What to book/bring
-        - 2–3 variations (e.g., cheaper/indoor)
-
-        Return plain text in a readable list.`);
+        Please return your ideas as a JSON formatted like so:
+{
+  "activities": [
+    {
+      "title": "Activity 1 Title",
+      "description": "activity 1 description"
+    },
+    {
+      "title": "Activity 2 Title",
+      "description": "Activity 2 Description"
+    },
+  ]
+}
+    `);
 
         return lines.join("\n");
     }
@@ -1130,22 +1137,7 @@ function SinglePage() {
                                         </div>
                                         </div>
 
-                                        {event.aiResult?.text && (
-                                        <div style={{ marginTop: 12 }}>
-                                            <strong>AI Suggestions:</strong>
-                                            <pre
-                                            style={{
-                                                whiteSpace: 'pre-wrap',
-                                                wordBreak: 'break-word',
-                                                background: '#f8f8f8',
-                                                padding: 12,
-                                                borderRadius: 8
-                                            }}
-                                            >
-                                            {event.aiResult.text}
-                                            </pre>
-                                        </div>
-                                        )}
+                                        {event.aiResult?.text && ActivitiesViewer(event.aiResult.text)}
 
                                         <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
                                         {!isParticipant ? (
