@@ -39,7 +39,7 @@ function LoginForm() {
                 />
             </div>
             <div className="login-form-line">
-                <button type="submit">Login</button>
+                <button type="submit" className="signup-button-inline">Login</button>
             </div>
         </form>
     )

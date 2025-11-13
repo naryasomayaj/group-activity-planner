@@ -76,7 +76,7 @@ function SinglePage() {
     switch (loginStep) {
         case 1:
             loginElement = <>
-            <button onClick={() => setLoginStep(0)}>Back</button>
+            <button className="signup-button-inline" onClick={() => setLoginStep(0)}>Back</button>
             <p>Enter an email and password to get started:</p>
             <SignupForm />
             </>
@@ -84,8 +84,10 @@ function SinglePage() {
         default:
             loginElement = <>
             <LoginForm />
-            <p>Don't have an account?</p>
-            <button onClick={() => setLoginStep(1)}>Click here to sign up</button>
+            <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
+                <p style={{ margin: '0 0 0.25rem 0' }}>Don't have an account?</p>
+                <button className="signup-button-inline" onClick={() => setLoginStep(1)}>Click here to sign up</button>
+            </div>
             </>
     }
 
@@ -857,10 +859,10 @@ function SinglePage() {
                 {isLoggedIn ? (
                 <div className="tabs">
             <div className="tab-headers">
-                <button disabled={activeTab === "tab1"} onClick={() => setActiveTab("tab1")}>
+                <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}disabled={activeTab === "tab1"} onClick={() => setActiveTab("tab1")}>
                 Groups
                 </button>
-                <button disabled={activeTab === "tab2"} onClick={() => setActiveTab("tab2")}>
+                <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}disabled={activeTab === "tab2"} onClick={() => setActiveTab("tab2")}>
                 My Profile
                 </button>
             </div>
@@ -868,8 +870,8 @@ function SinglePage() {
                 {activeTab === "tab1" && <div className="groups-area centered">
                     <br />
                     <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center'}}>
-                      <button onClick={() => setShowCreateModal(true)}>Create Group</button>
-                      <button onClick={() => setShowJoinModal(true)}>Join Group</button>
+                      <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}onClick={() => setShowCreateModal(true)}>Create Group</button>
+                      <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}onClick={() => setShowJoinModal(true)}>Join Group</button>
                     </div>
 
                     {showCreateModal && (
@@ -1073,7 +1075,7 @@ function SinglePage() {
                     )}
 
 
-                    <h3 style={{marginTop: '1rem'}}>My Groups:</h3>
+                    <h3 textAlign = 'left' style={{marginTop: '1rem'}}>My Groups:</h3>
                     <div className="group-list" style={{width: '100%'}}>
                     {groupInfo.map(group => (
                         <details key={group.id} open={openedGroups.has(group.id)}>
@@ -1093,13 +1095,15 @@ function SinglePage() {
                                     }}
                                     style={{
                                         fontSize: '0.9rem',
-                                        padding: '0.3rem 0.6rem'
+                                        padding: '0.3rem 0.6rem',
+                                        background: 'linear-gradient(to right, #6366f1, #8b5cf6)'
                                     }}
                                 >
                                     {visibleAccessCodes.has(group.id) ? 'Hide Access Code' : 'Show Access Code'}
                                 </button>
                                 {visibleAccessCodes.has(group.id) && (
                                     <div style={{
+                                        
                                         background: '#f3f4f6',
                                         padding: '0.3rem 0.6rem',
                                         borderRadius: '4px',
@@ -1220,7 +1224,7 @@ function SinglePage() {
                             value={age} 
                             onChange={(e) => setAge(e.target.value)}
                             min="0"
-                            style={{width: '80px'}}
+                            style={{borderRadius: '5px'}}
                         />
                         <h3>Interests: </h3>
                         <div style={{marginBottom: '1rem'}}>
@@ -1231,14 +1235,16 @@ function SinglePage() {
                                     onChange={(e) => setNewInterest(e.target.value)}
                                     placeholder="Add a new interest"
                                     style={{flex: 1}}
-                                    onKeyPress={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            addInterest(e);
-                                        }
-                                    }}
+                                    onKeyDown={(e) => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            addInterest(e);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            addInterest(e);
+        }
+    }}
                                 />
-                                <button onClick={addInterest}>Add</button>
                             </div>
                             <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem'}}>
                                 {interests.map((interest, index) => (
@@ -1268,8 +1274,8 @@ function SinglePage() {
                             </div>
                         </div>
                         <div style={{display: 'flex', gap: '0.5rem'}}>
-                            <button onClick={handleSubmit}>Submit</button>
-                            <button onClick={handleCancel}>Cancel</button>
+                            <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}onClick={handleSubmit}>Submit</button>
+                            <button style = {{background: 'linear-gradient(90deg, #d95353ff 0%, #971739ff 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}onClick={handleCancel}>Cancel</button>
                         </div>
                         </>
                     ) : (
@@ -1302,13 +1308,18 @@ function SinglePage() {
             </div>
         </div>
         ) : (
-        <div style={{ width: "90%", display: "table", tableLayout: "fixed"}}>
-            <div style={{display: "table-row"}}>
-                <div style={{display: "table-cell", padding: "3px"}}>
-                    <p>Welcome to Group Activity Planner, a website that helps you and your group find and schedule new activities. Please login or sign up to get started.</p>
-                </div>
-                <div style={{display: "table-cell", padding: "3px"}}>
-                    {loginElement}
+        <div style={{ width: "100%", display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <div style={{ maxWidth: 520, width: '90%', padding: '2rem 1rem', textAlign: 'center' }}>
+                <p style={{ fontSize: '1.05rem', marginBottom: '1.25rem' }}>Welcome to Group Activity Planner, a website that helps you and your group find and schedule new activities. Please login or sign up to get started.</p>
+
+                {/* Centered login box with stacked fields */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'stretch', margin: '0 auto' }}>
+                    {/** If LoginForm provides its own inputs this will render them; otherwise we show a minimal inline form wrapper for email/password/login **/}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {loginElement}
+                    </div>
+
+                    
                 </div>
             </div>
         </div>
