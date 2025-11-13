@@ -402,10 +402,10 @@ function SinglePage() {
                 {isLoggedIn ? (
                 <div className="tabs">
             <div className="tab-headers">
-                <button disabled={activeTab === "tab1"} onClick={() => setActiveTab("tab1")}>
+                <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}disabled={activeTab === "tab1"} onClick={() => setActiveTab("tab1")}>
                 Groups
                 </button>
-                <button disabled={activeTab === "tab2"} onClick={() => setActiveTab("tab2")}>
+                <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}disabled={activeTab === "tab2"} onClick={() => setActiveTab("tab2")}>
                 My Profile
                 </button>
             </div>
@@ -413,8 +413,8 @@ function SinglePage() {
                 {activeTab === "tab1" && <div className="groups-area centered">
                     <br />
                     <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center'}}>
-                      <button onClick={() => setShowCreateModal(true)}>Create Group</button>
-                      <button onClick={() => setShowJoinModal(true)}>Join Group</button>
+                      <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}onClick={() => setShowCreateModal(true)}>Create Group</button>
+                      <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}onClick={() => setShowJoinModal(true)}>Join Group</button>
                     </div>
 
                     {showCreateModal && (
@@ -509,7 +509,7 @@ function SinglePage() {
                         </div>
                     )}
 
-                    <h3 style={{marginTop: '1rem'}}>My Groups:</h3>
+                    <h3 textAlign = 'left' style={{marginTop: '1rem'}}>My Groups:</h3>
                     <div className="group-list" style={{width: '100%'}}>
                     {groupInfo.map(group => (
                         <details key={group.id} open={openedGroups.has(group.id)}>
@@ -556,15 +556,15 @@ function SinglePage() {
                                       <p>budget: {event.budget}</p>
                                       <p>vibe: {event.vibe}</p>
                                       <div style={{display: 'flex', gap: '0.5rem'}}>
-                                        <button>Edit</button>
+                                        <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}>Edit</button>
                                         <button onClick={() => joinEvent(group.id)}>Join</button>
                                       </div>
                                     </div>
                                 </details>
                             ))}
-                            <div style={{marginTop: '0.5rem', display: 'flex', gap: '0.5rem'}}>
-                              <button onClick={() => addEvent(group.id)}>Add Event</button>
-                              <button onClick={() => leaveGroup(group.id)}>Leave Group</button>
+                            <div style={{marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+                              <button style={{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}} onClick={() => addEvent(group.id)}>Add Event</button>
+                              <button style={{background: 'linear-gradient(90deg, #d95353ff 0%, #971739ff 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}} onClick={() => leaveGroup(group.id)}>Leave Group</button>
                             </div>
                         </details>
                     ))}
@@ -586,7 +586,7 @@ function SinglePage() {
                             value={age} 
                             onChange={(e) => setAge(e.target.value)}
                             min="0"
-                            style={{width: '80px'}}
+                            style={{borderRadius: '5px'}}
                         />
                         <h3>Interests: </h3>
                         <div style={{marginBottom: '1rem'}}>
@@ -597,14 +597,16 @@ function SinglePage() {
                                     onChange={(e) => setNewInterest(e.target.value)}
                                     placeholder="Add a new interest"
                                     style={{flex: 1}}
-                                    onKeyPress={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            addInterest(e);
-                                        }
-                                    }}
+                                    onKeyDown={(e) => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            addInterest(e);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            addInterest(e);
+        }
+    }}
                                 />
-                                <button onClick={addInterest}>Add</button>
                             </div>
                             <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem'}}>
                                 {interests.map((interest, index) => (
@@ -634,8 +636,8 @@ function SinglePage() {
                             </div>
                         </div>
                         <div style={{display: 'flex', gap: '0.5rem'}}>
-                            <button onClick={handleSubmit}>Submit</button>
-                            <button onClick={handleCancel}>Cancel</button>
+                            <button style = {{background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}onClick={handleSubmit}>Submit</button>
+                            <button style = {{background: 'linear-gradient(90deg, #d95353ff 0%, #971739ff 100%)', color: '#fff', border: 'none', padding: '0.5rem 0.9rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600'}}onClick={handleCancel}>Cancel</button>
                         </div>
                         </>
                     ) : (
