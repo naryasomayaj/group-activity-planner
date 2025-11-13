@@ -14,6 +14,11 @@
     width: 100%;
 }
 
+/* Center the last line (submit button) so the Login button appears centered */
+.login-form-line:last-child {
+    justify-content: center;
+}
+
 .login-form-line label {
     min-width: 72px;
     text-align: right;
@@ -36,9 +41,52 @@
     padding: 0.45rem 0.75rem;
     border-radius: 8px;
     cursor: pointer;
+    box-shadow: 0 6px 18px rgba(79,70,229,0.12);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.login-form button[type="submit"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(79,70,229,0.14);
 }
 
 @media (max-width: 600px) {
     .login-form-line { flex-direction: column; align-items: stretch; }
     .login-form-line label { text-align: left; min-width: auto; }
 }
+
+.signup-button-inline {
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+    color: #fff;
+    border: none;
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(99,102,241,0.12);
+    font-weight: 600;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+}
+.signup-button-inline:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(99,102,241,0.16);
+}
+.signup-button-inline:active { transform: translateY(0); }
+
+/* Ensure the login submit button exactly matches the signup/back button when the
+   shared class is applied (avoids conflicts with the earlier submit selector). */
+.login-form button[type="submit"].signup-button-inline {
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+    color: #fff;
+    border: none;
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(99,102,241,0.12);
+    font-weight: 600;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+}
+.login-form button[type="submit"].signup-button-inline:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(99,102,241,0.16);
+}
+.login-form button[type="submit"].signup-button-inline:active { transform: translateY(0); }

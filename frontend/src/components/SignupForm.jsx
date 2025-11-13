@@ -63,7 +63,7 @@ function SignupForm() {
                 />
             </div>
             <div className="login-form-line">
-                <button type="submit">Create Account</button>
+                <button type="submit" className="signup-button-inline">Create Account</button>
             </div>
         </form>
     )
