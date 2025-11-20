@@ -1467,6 +1467,7 @@ function SinglePage() {
                                                                 <button onClick={() => leaveEvent(group.id, event.id)}>Leave</button>
                                                             )}
 
+
                                                             <button
                                                                 onClick={() => {
                                                                     const my = (event.preferences && event.preferences[auth.currentUser?.uid]) || {};
@@ -1482,6 +1483,11 @@ function SinglePage() {
                                                                     setIsEditingEvent(false);
                                                                     setShowEventModal(true);
                                                                     setMode('myPref');  // IMPORTANT: saves via updateMyEventPreference
+                                                                }}
+                                                                disabled={event.voting?.isOpen || event.voting?.winner}
+                                                                style={{
+                                                                    opacity: (event.voting?.isOpen || event.voting?.winner) ? 0.5 : 1,
+                                                                    cursor: (event.voting?.isOpen || event.voting?.winner) ? 'not-allowed' : 'pointer'
                                                                 }}
                                                             >
                                                                 Edit My Preference
