@@ -1033,6 +1033,7 @@ function SinglePage() {
                     title: winner?.title || 'Unknown',
                     description: winner?.description || '',
                     voteCount: maxVotes,
+                    wasTied: tiedWinners.length > 1,  // Flag to indicate if there was a tie
                     closedAt: new Date().toISOString()
                 }
             };

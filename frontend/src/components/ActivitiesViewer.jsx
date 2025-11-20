@@ -49,6 +49,11 @@ function ActivitiesViewer({ rawLLMtext, voting, isParticipant, currentUserId, on
                     <p style={{ margin: '0', opacity: 0.95 }}>{voting.winner.description}</p>
                     <div style={{ marginTop: '12px', fontSize: '0.9rem', opacity: 0.9 }}>
                         {voting.winner.voteCount} vote{voting.winner.voteCount !== 1 ? 's' : ''}
+                        {voting.winner.wasTied && (
+                            <div style={{ fontSize: '0.8rem', marginTop: '4px', fontStyle: 'italic', opacity: 0.8 }}>
+                                (Randomly selected from tied options)
+                            </div>
+                        )}
                     </div>
                 </div>
 
