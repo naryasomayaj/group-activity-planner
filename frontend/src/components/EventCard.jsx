@@ -19,7 +19,14 @@ const EventCard = ({ event, onClick }) => {
 
             <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem' }}>
                 <div className="bg-muted px-2 py-1 rounded">
-                    Budget: {event.budget ? `$${event.budget}` : 'N/A'}
+                    Lowest Budget: {(() => {
+                        const budgets = Object.values(event.preferences || {})
+                            .map(p => p.budget)
+                            .filter(b => b !== null && b !== undefined && b !== "")
+                            .map(Number)
+                            .filter(b => !isNaN(b));
+                        return budgets.length > 0 ? `$${Math.min(...budgets)}` : 'N/A';
+                    })()}
                 </div>
                 <div className="bg-muted px-2 py-1 rounded">
                     {event.participants?.length || 0} Going

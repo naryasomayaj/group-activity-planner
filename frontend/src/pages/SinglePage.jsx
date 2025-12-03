@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { auth, db } from '../firebase';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, setDoc, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, setDoc, runTransaction, onSnapshot } from 'firebase/firestore';
 import LoginForm from '../components/LoginForm';
 import SignupForm from '../components/SignUpForm';
 import ActivitiesViewer from '../components/ActivitiesViewer.jsx';
@@ -100,6 +100,23 @@ function SinglePage() {
         });
         return unsubscribe;
     }, []);
+
+    // Real-time listener for selected group
+    useEffect(() => {
+        if (!selectedGroup?.id) return;
+
+        const unsub = onSnapshot(doc(db, 'Groups', selectedGroup.id), (doc) => {
+            if (doc.exists()) {
+                const data = { id: doc.id, ...doc.data(), events: doc.data().events || [] };
+                setSelectedGroup(data);
+
+                // Also update the group in the list to keep it in sync
+                setGroupInfo(prev => prev.map(g => g.id === data.id ? data : g));
+            }
+        });
+
+        return () => unsub();
+    }, [selectedGroup?.id]);
 
     const handleLogout = async (e) => {
         try {
@@ -497,8 +514,9 @@ function SinglePage() {
                 participants: [user.uid],
                 preferences: {
                     [user.uid]: {
-                        budget: budgetNumber,
-                        vibes: finalVibes,
+                        budget: null, // Defer budget
+                        vibes: [], // Defer vibes
+                        interests: Array.isArray(interests) ? interests : [], // Initialize interests
                         updatedAt: new Date().toISOString(),
                     }
                 },
@@ -509,12 +527,13 @@ function SinglePage() {
             await updateDoc(groupRef, { events: [...currentEvents, newEvent] });
 
             showToast('Event created successfully!', 'success');
-            setShowEventModal(false);
-            resetEventForm();
+            // Don't close modal or reset form yet, we'll switch to preferences mode
             await fetchGroups();
+            return newEvent.id; // Return the new ID
         } catch (error) {
             console.error('Error creating event:', error);
             showToast('Error creating event', 'error');
+            return null;
         }
     }
 
@@ -1254,22 +1273,41 @@ function SinglePage() {
                 <div className="flex gap-2 flex-wrap border-t pt-4">
                     {!isParticipant ? (
                         <Button onClick={() => joinEvent(selectedGroup.id, event.id)}>Join Event</Button>
-                    ) : (
-                        <Button variant="danger" onClick={() => leaveEvent(selectedGroup.id, event.id)}>Leave Event</Button>
+                    ) : null}
+
+                    {/* Edit Event Button - Only for Creator */}
+                    {event.createdBy === auth.currentUser?.uid && (
+                        <Button variant="outline" onClick={() => {
+                            setEventForm({
+                                name: event.name,
+                                location: event.location,
+                                date: event.date || "",
+                                budget: "", // Budget handled in preferences
+                                vibes: [],
+                                interests: Array.isArray(interests) ? interests : [],
+                            });
+                            setIsEditingEvent(true);
+                            setShowEventDrawer(false); // Close drawer
+                            setShowEventModal(true); // Open modal
+                            setMode(null);
+                        }}>Edit Event</Button>
                     )}
 
+                    {/* Edit Preferences Button - For Everyone */}
                     <Button
                         variant="primary" // Changed from secondary to primary
                         onClick={() => {
                             const my = (event.preferences && event.preferences[auth.currentUser?.uid]) || {};
                             // Use stored interests if available, otherwise fall back to profile interests
-                            const myInterests = Array.isArray(my.interests) ? my.interests : (Array.isArray(interests) ? interests : []);
+                            const currentInterests = my.interests && my.interests.length > 0 ? my.interests : (Array.isArray(interests) ? interests : []);
+
                             setEventForm({
-                                name: event.name || "",
-                                location: event.location || "",
-                                budget: (my.budget ?? "") === null ? "" : (my.budget ?? ""),
-                                vibes: Array.isArray(my.vibes) ? my.vibes : [], // Only manual vibes
-                                interests: myInterests // Store for display
+                                name: event.name,
+                                location: event.location,
+                                date: event.date || "", // Keep date context
+                                budget: my.budget || "",
+                                vibes: my.vibes || [],
+                                interests: currentInterests
                             });
                             setVibeDraft("");
                             setMode('myPref');
@@ -1281,24 +1319,13 @@ function SinglePage() {
                         Edit My Preference
                     </Button>
 
-                    {amCreator && (
-                        <>
-                            <Button onClick={() => {
-                                setEventForm({
-                                    name: event.name || "",
-                                    location: event.location || "",
-                                    date: event.date || "",
-                                    budget: "", // Budget handled in preferences
-                                    vibes: [],
-                                    interests: Array.isArray(interests) ? interests : [],
-                                });
-                                setIsEditingEvent(true);
-                                setShowEventDrawer(false); // Close drawer
-                                setShowEventModal(true); // Open modal
-                                setMode(null);
-                            }}>Edit Event</Button>
-                            <Button variant="danger" onClick={() => deleteEvent(selectedGroup.id, event.id)}>Delete Event</Button>
-                        </>
+                    {event.createdBy === auth.currentUser?.uid && (
+                        <Button variant="danger" onClick={() => deleteEvent(selectedGroup.id, event.id)}>Delete Event</Button>
+                    )}
+
+                    {/* Leave Event Button for non-creators */}
+                    {event.createdBy !== auth.currentUser?.uid && (
+                        <Button variant="danger" onClick={() => leaveEvent(selectedGroup.id, event.id)}>Leave Event</Button>
                     )}
 
                     <Button
@@ -1400,79 +1427,118 @@ function SinglePage() {
             <Modal
                 isOpen={showEventModal}
                 onClose={() => setShowEventModal(false)}
-                title={isEditingEvent ? 'Edit Event' : 'Create Event'}
+                title={mode === 'myPref' ? 'Edit My Preferences' : (isEditingEvent ? 'Edit Event' : 'Create Event')}
             >
                 <div className="space-y-4">
-                    <div className="form-group">
-                        <label className="form-label">Name</label>
-                        <input
-                            className="form-input"
-                            type="text"
-                            value={eventForm.name}
-                            onChange={(e) => setEventForm(prev => ({ ...prev, name: e.target.value }))}
-                        />
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">Location</label>
-                        <input
-                            className="form-input"
-                            type="text"
-                            value={eventForm.location}
-                            onChange={(e) => setEventForm(prev => ({ ...prev, location: e.target.value }))}
-                        />
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">Date</label>
-                        <input
-                            className="form-input"
-                            type="datetime-local"
-                            value={eventForm.date}
-                            onChange={(e) => setEventForm(prev => ({ ...prev, date: e.target.value }))}
-                        />
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">Budget</label>
-                        <input
-                            className="form-input"
-                            type="number"
-                            value={eventForm.budget}
-                            onChange={(e) => setEventForm(prev => ({ ...prev, budget: e.target.value }))}
-                            min="0"
-                        />
-                    </div>
+                    {mode === 'myPref' ? (
+                        <>
+                            <div className="form-group">
+                                <label className="form-label">Budget</label>
+                                <input
+                                    className="form-input"
+                                    type="number"
+                                    value={eventForm.budget}
+                                    onChange={(e) => setEventForm(prev => ({ ...prev, budget: e.target.value }))}
+                                    min="0"
+                                />
+                            </div>
 
-                    {/* Vibes Section */}
-                    <div className="form-group">
-                        <label className="form-label">Event Vibes</label>
-                        <div className="flex gap-2 mb-2">
-                            <input
-                                className="form-input"
-                                type="text"
-                                value={vibeDraft}
-                                onChange={(e) => setVibeDraft(e.target.value)}
-                                placeholder="e.g. chill"
-                                onKeyDown={(e) => e.key === 'Enter' && addVibe(e)}
-                            />
-                            <Button type="button" onClick={addVibe}>Add</Button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {(eventForm.vibes || []).map((v, i) => (
-                                <span key={i} className="bg-muted px-2 py-1 rounded text-sm flex items-center gap-1">
-                                    {v}
-                                    <button type="button" onClick={() => removeVibe(i)} className="text-muted-foreground hover:text-foreground">&times;</button>
-                                </span>
-                            ))}
-                        </div>
-                    </div>
+                            <div className="form-group">
+                                <label className="form-label">Your Interests (from Profile)</label>
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                    {eventForm.interests && eventForm.interests.length > 0 ? (
+                                        eventForm.interests.map((interest, i) => (
+                                            <span key={i} className="bg-muted px-2 py-1 rounded text-sm text-muted-foreground">
+                                                {interest}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="text-muted-foreground text-sm">No interests in profile</span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Event Vibes</label>
+                                <div className="flex gap-2 mb-2">
+                                    <input
+                                        className="form-input"
+                                        type="text"
+                                        value={vibeDraft}
+                                        onChange={(e) => setVibeDraft(e.target.value)}
+                                        placeholder="e.g. chill"
+                                        onKeyDown={(e) => e.key === 'Enter' && addVibe(e)}
+                                    />
+                                    <Button type="button" onClick={addVibe}>Add</Button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {(eventForm.vibes || []).map((v, i) => (
+                                        <span key={i} className="bg-muted px-2 py-1 rounded text-sm flex items-center gap-1">
+                                            {v}
+                                            <button type="button" onClick={() => removeVibe(i)} className="text-muted-foreground hover:text-foreground">&times;</button>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="form-group">
+                                <label className="form-label">Name</label>
+                                <input
+                                    className="form-input"
+                                    type="text"
+                                    value={eventForm.name}
+                                    onChange={(e) => setEventForm(prev => ({ ...prev, name: e.target.value }))}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Location</label>
+                                <input
+                                    className="form-input"
+                                    type="text"
+                                    value={eventForm.location}
+                                    onChange={(e) => setEventForm(prev => ({ ...prev, location: e.target.value }))}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Date</label>
+                                <input
+                                    className="form-input"
+                                    type="datetime-local"
+                                    value={eventForm.date}
+                                    onChange={(e) => setEventForm(prev => ({ ...prev, date: e.target.value }))}
+                                />
+                            </div>
+                        </>
+                    )}
 
                     <div className="flex justify-end gap-2 mt-6">
                         <Button variant="ghost" onClick={() => setShowEventModal(false)}>Cancel</Button>
                         <Button
                             variant="primary"
-                            onClick={isEditingEvent ? () => updateEvent(eventGroupId, editingEventId) : () => addEvent(selectedGroup.id)}
-                            disabled={!eventForm.name.trim() || !selectedGroup?.id}
+                            onClick={() => {
+                                if (mode === 'myPref') {
+                                    updateMyEventPreference(eventGroupId, editingEventId, eventForm.budget, eventForm.vibes);
+                                } else if (isEditingEvent) {
+                                    updateEvent(eventGroupId, editingEventId);
+                                } else {
+                                    // Create event flow
+                                    (async () => {
+                                        const newId = await addEvent(selectedGroup.id);
+                                        if (newId) {
+                                            setEditingEventId(newId);
+                                            setEventGroupId(selectedGroup.id);
+                                            setMode('myPref');
+                                            setEventForm(prev => ({ ...prev, budget: "", vibes: [] }));
+                                            setVibeDraft("");
+                                        }
+                                    })();
+                                }
+                            }}
+                            disabled={mode !== 'myPref' && (!eventForm.name.trim() || !selectedGroup?.id)}
                         >
-                            {isEditingEvent ? 'Save Changes' : 'Create Event'}
+                            {mode === 'myPref' ? 'Save Preferences' : (isEditingEvent ? 'Save Changes' : 'Create Event')}
                         </Button>
                     </div>
                 </div>
