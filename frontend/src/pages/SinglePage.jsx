@@ -413,7 +413,7 @@ function SinglePage() {
 
     // Event Logic
     const resetEventForm = () => {
-        setEventForm({ name: "", location: "", budget: "", vibes: [] });
+        setEventForm({ name: "", location: "", budget: "", vibes: [], interests: Array.isArray(interests) ? interests : [], });
         setVibeDraft("");
         setEventGroupId(null);
         setMode(null);
