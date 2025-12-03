@@ -1305,7 +1305,7 @@ function SinglePage() {
                                     date: event.date || "",
                                     budget: "", // Budget handled in preferences
                                     vibes: [],
-                                    interests: []
+                                    interests: Array.isArray(interests) ? interests : [],
                                 });
                                 setIsEditingEvent(true);
                                 setMode(null);
