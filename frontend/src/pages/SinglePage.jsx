@@ -188,7 +188,8 @@ function SinglePage() {
                             updates[uid] = {
                                 firstName: ud.firstName || '',
                                 lastName: ud.lastName || '',
-                                email: ud.email || ''
+                                email: ud.email || '',
+                                interests: Array.isArray(ud.interests) ? ud.interests : []
                             };
                         } else {
                             updates[uid] = { firstName: '', lastName: '', email: '' };
@@ -446,6 +447,13 @@ function SinglePage() {
 
             const vibes = (eventForm.vibes || []).map(v => v.trim()).filter(Boolean);
 
+            const finalVibes =
+                vibes.length
+                    ? vibes
+                    : (Array.isArray(interests)
+                        ? interests.map(v => `${v}`.trim()).filter(Boolean)
+                        : []);
+
             const groupRef = doc(db, 'Groups', groupId);
             const groupSnap = await getDoc(groupRef);
             if (!groupSnap.exists()) {
@@ -464,7 +472,7 @@ function SinglePage() {
                 preferences: {
                     [user.uid]: {
                         budget: budgetNumber,           // this user’s budget
-                        vibes,                          // this user’s vibes
+                        vibes: finalVibes,                         // this user’s vibes
                         updatedAt: new Date().toISOString(),
                     }
                 },
@@ -641,7 +649,7 @@ function SinglePage() {
             const event = events[idx];
             const participants = Array.isArray(event.participants) ? event.participants : [];
             const prefs = event.preferences || {}; // <-- define prefs from event
-
+            const profileVibes = Array.isArray(interests) && interests.length ? interests : [];
             if (participants.includes(user.uid)) {
                 showToast('You already joined this event', 'info');
                 return;
@@ -652,7 +660,7 @@ function SinglePage() {
                 ...prefs,
                 [user.uid]: prefs[user.uid] ?? {
                     budget: null,
-                    vibes: [],
+                    vibes: profileVibes,
                     updatedAt: new Date().toISOString(),
                 },
             };
@@ -1471,11 +1479,15 @@ function SinglePage() {
                                                             <button
                                                                 onClick={() => {
                                                                     const my = (event.preferences && event.preferences[auth.currentUser?.uid]) || {};
+                                                                    const defaultVibes =
+                                                                        Array.isArray(my.vibes) && my.vibes.length
+                                                                            ? my.vibes
+                                                                            : (Array.isArray(interests) ? interests : []);
                                                                     setEventForm({
                                                                         name: event.name || "",
                                                                         location: event.location || "",
                                                                         budget: (my.budget ?? "") === null ? "" : (my.budget ?? ""),
-                                                                        vibes: Array.isArray(my.vibes) ? my.vibes : [],
+                                                                        vibes: defaultVibes,
                                                                     });
                                                                     setVibeDraft("");
                                                                     setEventGroupId(group.id);
