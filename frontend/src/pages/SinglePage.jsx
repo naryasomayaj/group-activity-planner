@@ -18,6 +18,7 @@ import Card from '../components/ui/Card';
 import GroupCard from '../components/GroupCard';
 import EventCard from '../components/EventCard';
 import Modal from '../components/Modal';
+import SideDrawer from '../components/ui/SideDrawer';
 
 function SinglePage() {
     const auth = getAuth();
@@ -68,11 +69,12 @@ function SinglePage() {
     };
 
     // Event State
+    const [showEventModal, setShowEventModal] = useState(false);
+    const [showEventDrawer, setShowEventDrawer] = useState(false);
     const [isEditingEvent, setIsEditingEvent] = useState(false);
     const [editingEventId, setEditingEventId] = useState(null);
     const [mode, setMode] = useState(null);
     const [vibeDraft, setVibeDraft] = useState("");
-    const [showEventModal, setShowEventModal] = useState(false);
     const [eventGroupId, setEventGroupId] = useState(null);
     const [eventForm, setEventForm] = useState({
         name: "",
@@ -413,7 +415,7 @@ function SinglePage() {
 
     // Event Logic
     const resetEventForm = () => {
-        setEventForm({ name: "", location: "", budget: "", vibes: [], interests: Array.isArray(interests) ? interests : [], });
+        setEventForm({ name: "", location: "", budget: "", vibes: [], interests: Array.isArray(interests) ? interests : [], date: "" });
         setVibeDraft("");
         setEventGroupId(null);
         setMode(null);
@@ -1156,29 +1158,10 @@ function SinglePage() {
                                 key={event.id}
                                 event={event}
                                 onClick={() => {
-                                    // Open event details (reuse the modal logic but maybe we need a view mode?)
-                                    // For now, let's just expand it inline or show a modal. 
-                                    // The user asked for "switch main view", but for events inside a group, 
-                                    // maybe a modal is cleaner or just expanding it.
-                                    // Let's use the existing <details> logic but wrapped in a nice UI, 
-                                    // OR better: Open a "Event Details Modal" which contains the ActivitiesViewer etc.
-                                    // I'll implement a simple "Event Details" section below the grid if selected,
-                                    // or just render the full event card content in a modal.
-                                    // Given the complexity of voting/AI, I'll stick to the existing logic 
-                                    // but maybe rendered in a Modal or just keep the <details> approach?
-                                    // No, <details> is ugly.
-                                    // I'll render the event details in a Modal.
-                                    // But wait, the existing logic uses <details> to show/hide.
-                                    // I will use a state `selectedEventId` to show a Modal with the full event details.
-                                    setEditingEventId(event.id); // Reuse this or create new state?
-                                    // Let's create a new state `viewEvent`
-                                    // Actually, I'll just use `editingEventId` for editing, and `viewEventId` for viewing.
-                                    // For now, let's just use a simple toggle or expand.
-                                    // I'll use a Modal for viewing event details.
-                                    setEventGroupId(selectedGroup.id);
                                     setEditingEventId(event.id);
+                                    setEventGroupId(selectedGroup.id);
                                     setMode('view'); // New mode 'view'
-                                    setShowEventModal(true);
+                                    setShowEventDrawer(true); // Open drawer instead of modal
                                 }}
                             />
                         ))}
@@ -1276,7 +1259,7 @@ function SinglePage() {
                     )}
 
                     <Button
-                        variant="secondary"
+                        variant="primary" // Changed from secondary to primary
                         onClick={() => {
                             const my = (event.preferences && event.preferences[auth.currentUser?.uid]) || {};
                             // Use stored interests if available, otherwise fall back to profile interests
@@ -1290,6 +1273,8 @@ function SinglePage() {
                             });
                             setVibeDraft("");
                             setMode('myPref');
+                            setShowEventDrawer(false); // Close drawer
+                            setShowEventModal(true); // Open modal for preferences
                         }}
                         disabled={event.voting?.isOpen || event.voting?.winner}
                     >
@@ -1308,6 +1293,8 @@ function SinglePage() {
                                     interests: Array.isArray(interests) ? interests : [],
                                 });
                                 setIsEditingEvent(true);
+                                setShowEventDrawer(false); // Close drawer
+                                setShowEventModal(true); // Open modal
                                 setMode(null);
                             }}>Edit Event</Button>
                             <Button variant="danger" onClick={() => deleteEvent(selectedGroup.id, event.id)}>Delete Event</Button>
@@ -1409,107 +1396,97 @@ function SinglePage() {
                 </div>
             </Modal>
 
+            {/* Create/Edit Event Modal */}
             <Modal
                 isOpen={showEventModal}
                 onClose={() => setShowEventModal(false)}
-                title={mode === 'view' ? (selectedGroup?.events.find(e => e.id === editingEventId)?.name || 'Event Details') : (mode === 'myPref' ? 'Edit My Preferences' : (isEditingEvent ? 'Edit Event' : 'Create Event'))}
+                title={isEditingEvent ? 'Edit Event' : 'Create Event'}
             >
-                {mode === 'view' ? renderEventDetailsModalContent() : (
-                    <div className="space-y-4">
-                        <div className="form-group">
-                            <label className="form-label">Name</label>
+                <div className="space-y-4">
+                    <div className="form-group">
+                        <label className="form-label">Name</label>
+                        <input
+                            className="form-input"
+                            type="text"
+                            value={eventForm.name}
+                            onChange={(e) => setEventForm(prev => ({ ...prev, name: e.target.value }))}
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Location</label>
+                        <input
+                            className="form-input"
+                            type="text"
+                            value={eventForm.location}
+                            onChange={(e) => setEventForm(prev => ({ ...prev, location: e.target.value }))}
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Date</label>
+                        <input
+                            className="form-input"
+                            type="datetime-local"
+                            value={eventForm.date}
+                            onChange={(e) => setEventForm(prev => ({ ...prev, date: e.target.value }))}
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Budget</label>
+                        <input
+                            className="form-input"
+                            type="number"
+                            value={eventForm.budget}
+                            onChange={(e) => setEventForm(prev => ({ ...prev, budget: e.target.value }))}
+                            min="0"
+                        />
+                    </div>
+
+                    {/* Vibes Section */}
+                    <div className="form-group">
+                        <label className="form-label">Event Vibes</label>
+                        <div className="flex gap-2 mb-2">
                             <input
                                 className="form-input"
                                 type="text"
-                                value={eventForm.name}
-                                onChange={(e) => setEventForm(prev => ({ ...prev, name: e.target.value }))}
+                                value={vibeDraft}
+                                onChange={(e) => setVibeDraft(e.target.value)}
+                                placeholder="e.g. chill"
+                                onKeyDown={(e) => e.key === 'Enter' && addVibe(e)}
                             />
+                            <Button type="button" onClick={addVibe}>Add</Button>
                         </div>
-                        <div className="form-group">
-                            <label className="form-label">Location</label>
-                            <input
-                                className="form-input"
-                                type="text"
-                                value={eventForm.location}
-                                onChange={(e) => setEventForm(prev => ({ ...prev, location: e.target.value }))}
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Date</label>
-                            <input
-                                className="form-input"
-                                type="datetime-local"
-                                value={eventForm.date}
-                                onChange={(e) => setEventForm(prev => ({ ...prev, date: e.target.value }))}
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Budget</label>
-                            <input
-                                className="form-input"
-                                type="number"
-                                value={eventForm.budget}
-                                onChange={(e) => setEventForm(prev => ({ ...prev, budget: e.target.value }))}
-                                min="0"
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Your Interests (from Profile)</label>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                {eventForm.interests && eventForm.interests.length > 0 ? (
-                                    eventForm.interests.map((interest, i) => (
-                                        <span key={i} className="bg-muted px-2 py-1 rounded text-sm text-muted-foreground">
-                                            {interest}
-                                        </span>
-                                    ))
-                                ) : (
-                                    <span className="text-muted-foreground text-sm">No interests in profile</span>
-                                )}
-                            </div>
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Event Vibes (Add specific vibes for this event)</label>
-                            <div className="flex gap-2 mb-2">
-                                <input
-                                    className="form-input"
-                                    type="text"
-                                    value={vibeDraft}
-                                    onChange={(e) => setVibeDraft(e.target.value)}
-                                    placeholder="e.g. chill"
-                                    onKeyDown={(e) => e.key === 'Enter' && addVibe(e)}
-                                />
-                                <Button type="button" onClick={addVibe}>Add</Button>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                {(eventForm.vibes || []).map((v, i) => (
-                                    <span key={i} className="bg-muted px-2 py-1 rounded text-sm flex items-center gap-1">
-                                        {v}
-                                        <button type="button" onClick={() => removeVibe(i)} className="text-muted-foreground hover:text-foreground">&times;</button>
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="flex justify-end gap-2 mt-6">
-                            <Button variant="ghost" onClick={() => setShowEventModal(false)}>Cancel</Button>
-                            <Button
-                                onClick={() => {
-                                    if (mode === 'myPref') {
-                                        updateMyEventPreference(eventGroupId, editingEventId, eventForm.budget, eventForm.vibes);
-                                    } else if (isEditingEvent) {
-                                        updateEvent(eventGroupId, editingEventId);
-                                    } else {
-                                        addEvent(eventGroupId);
-                                    }
-                                }}
-                                disabled={!eventForm.name.trim() || !eventGroupId}
-                            >
-                                {mode === 'myPref' ? 'Save Preferences' : (isEditingEvent ? 'Save Changes' : 'Create Event')}
-                            </Button>
+                        <div className="flex flex-wrap gap-2">
+                            {(eventForm.vibes || []).map((v, i) => (
+                                <span key={i} className="bg-muted px-2 py-1 rounded text-sm flex items-center gap-1">
+                                    {v}
+                                    <button type="button" onClick={() => removeVibe(i)} className="text-muted-foreground hover:text-foreground">&times;</button>
+                                </span>
+                            ))}
                         </div>
                     </div>
-                )}
+
+                    <div className="flex justify-end gap-2 mt-6">
+                        <Button variant="ghost" onClick={() => setShowEventModal(false)}>Cancel</Button>
+                        <Button
+                            variant="primary"
+                            onClick={isEditingEvent ? () => updateEvent(eventGroupId, editingEventId) : () => createEvent(selectedGroup.id)}
+                            disabled={!eventForm.name.trim() || !selectedGroup?.id}
+                        >
+                            {isEditingEvent ? 'Save Changes' : 'Create Event'}
+                        </Button>
+                    </div>
+                </div>
             </Modal>
-        </div>
+
+            {/* Event Details Side Drawer */}
+            <SideDrawer
+                isOpen={showEventDrawer}
+                onClose={() => setShowEventDrawer(false)}
+                title={selectedGroup?.events.find(e => e.id === editingEventId)?.name || 'Event Details'}
+            >
+                {renderEventDetailsModalContent()}
+            </SideDrawer>
+        </div >
     );
 }
 
