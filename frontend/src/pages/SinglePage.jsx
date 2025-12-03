@@ -1365,6 +1365,12 @@ function SinglePage() {
                     {renderSidebar()}
                     <div className="main-content">
                         <div className="top-bar">
+                            <div className="flex items-center gap-3 mr-4">
+                                <div className="text-right hidden sm:block">
+                                    <div className="font-medium text-sm">{firstName} {lastName}</div>
+                                    <div className="text-xs text-muted-foreground">{email}</div>
+                                </div>
+                            </div>
                             <Button variant="ghost" onClick={toggleTheme} className="mr-2">
                                 {theme === 'light' ? '🌙' : '☀️'}
                             </Button>
@@ -1492,6 +1498,7 @@ function SinglePage() {
                                     type="text"
                                     value={eventForm.name}
                                     onChange={(e) => setEventForm(prev => ({ ...prev, name: e.target.value }))}
+                                    placeholder="e.g. Weekend Hike"
                                 />
                             </div>
                             <div className="form-group">
@@ -1501,6 +1508,7 @@ function SinglePage() {
                                     type="text"
                                     value={eventForm.location}
                                     onChange={(e) => setEventForm(prev => ({ ...prev, location: e.target.value }))}
+                                    placeholder="e.g. Blue Hills"
                                 />
                             </div>
                             <div className="form-group">
