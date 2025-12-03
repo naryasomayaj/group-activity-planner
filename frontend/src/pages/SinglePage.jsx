@@ -1256,7 +1256,7 @@ function SinglePage() {
                         />
 
                         <div className="flex gap-2 mt-4 flex-wrap">
-                            {isParticipant && !event.voting?.isOpen && !event.voting?.winner && (
+                            {amCreator && !event.voting?.isOpen && !event.voting?.winner && (
                                 <Button onClick={() => startVoting(selectedGroup.id, event.id)} className="bg-green-600 hover:bg-green-700 text-white">
                                     🗳️ Start Voting
                                 </Button>
@@ -1328,12 +1328,14 @@ function SinglePage() {
                         <Button variant="danger" onClick={() => leaveEvent(selectedGroup.id, event.id)}>Leave Event</Button>
                     )}
 
-                    <Button
-                        onClick={() => generateForEvent(selectedGroup.id, event.id)}
-                        disabled={llmBusy.has(event.id) || event.voting?.isOpen || event.voting?.winner}
-                    >
-                        {llmBusy.has(event.id) ? 'Generating…' : 'Generate Ideas'}
-                    </Button>
+                    {event.createdBy === auth.currentUser?.uid && (
+                        <Button
+                            onClick={() => generateForEvent(selectedGroup.id, event.id)}
+                            disabled={llmBusy.has(event.id) || event.voting?.isOpen || event.voting?.winner}
+                        >
+                            {llmBusy.has(event.id) ? 'Generating…' : 'Generate Ideas'}
+                        </Button>
+                    )}
                 </div>
             </div>
         );
