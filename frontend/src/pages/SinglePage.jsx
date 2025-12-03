@@ -1469,7 +1469,7 @@ function SinglePage() {
                         <Button variant="ghost" onClick={() => setShowEventModal(false)}>Cancel</Button>
                         <Button
                             variant="primary"
-                            onClick={isEditingEvent ? () => updateEvent(eventGroupId, editingEventId) : () => createEvent(selectedGroup.id)}
+                            onClick={isEditingEvent ? () => updateEvent(eventGroupId, editingEventId) : () => addEvent(selectedGroup.id)}
                             disabled={!eventForm.name.trim() || !selectedGroup?.id}
                         >
                             {isEditingEvent ? 'Save Changes' : 'Create Event'}
