@@ -79,6 +79,8 @@ function SinglePage() {
         location: "",
         budget: "",
         vibes: [],
+        interests: [],
+        date: "" // Add date field
     });
 
     // Auth Listener
@@ -468,6 +470,7 @@ function SinglePage() {
             if (!name) { showToast('Please enter an event name', 'error'); return; }
 
             const location = (eventForm.location || "").trim();
+            const date = (eventForm.date || "").trim(); // Get date from form
             const budgetNumber = eventForm.budget === "" ? null : Number(eventForm.budget);
             if (budgetNumber !== null && Number.isNaN(budgetNumber)) {
                 showToast('Budget must be a number', 'error');
@@ -488,6 +491,7 @@ function SinglePage() {
                 id: (crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
                 name,
                 location,
+                date, // Save date
                 participants: [user.uid],
                 preferences: {
                     [user.uid]: {
@@ -523,6 +527,7 @@ function SinglePage() {
             if (!name) { showToast('Please enter an event name', 'error'); return; }
 
             const location = (eventForm.location || "").trim();
+            const date = (eventForm.date || "").trim();
             const budgetNumber = eventForm.budget === "" ? null : Number(eventForm.budget);
             if (budgetNumber !== null && Number.isNaN(budgetNumber)) {
                 showToast('Budget must be a number', 'error'); return;
@@ -541,6 +546,7 @@ function SinglePage() {
                 ...events[idx],
                 name,
                 location,
+                date,
                 updatedAt: new Date().toISOString(),
                 updatedBy: user.uid,
             };
@@ -1205,6 +1211,10 @@ function SinglePage() {
         return (
             <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                        <label className="text-sm text-muted-foreground">Date</label>
+                        <p className="font-medium">{event.date ? new Date(event.date).toLocaleString() : '—'}</p>
+                    </div>
                     <div>
                         <label className="text-sm text-muted-foreground">Location</label>
                         <p className="font-medium">{event.location || '—'}</p>
@@ -1287,7 +1297,21 @@ function SinglePage() {
                     </Button>
 
                     {amCreator && (
-                        <Button variant="danger" onClick={() => deleteEvent(selectedGroup.id, event.id)}>Delete Event</Button>
+                        <>
+                            <Button onClick={() => {
+                                setEventForm({
+                                    name: event.name || "",
+                                    location: event.location || "",
+                                    date: event.date || "",
+                                    budget: "", // Budget handled in preferences
+                                    vibes: [],
+                                    interests: []
+                                });
+                                setIsEditingEvent(true);
+                                setMode(null);
+                            }}>Edit Event</Button>
+                            <Button variant="danger" onClick={() => deleteEvent(selectedGroup.id, event.id)}>Delete Event</Button>
+                        </>
                     )}
 
                     <Button
@@ -1408,6 +1432,15 @@ function SinglePage() {
                                 type="text"
                                 value={eventForm.location}
                                 onChange={(e) => setEventForm(prev => ({ ...prev, location: e.target.value }))}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Date</label>
+                            <input
+                                className="form-input"
+                                type="datetime-local"
+                                value={eventForm.date}
+                                onChange={(e) => setEventForm(prev => ({ ...prev, date: e.target.value }))}
                             />
                         </div>
                         <div className="form-group">

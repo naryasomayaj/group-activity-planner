@@ -12,6 +12,7 @@ const EventCard = ({ event, onClick }) => {
                 <div>
                     <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.125rem' }}>{event.name}</h3>
                     <p className="text-muted-foreground text-sm">{event.location || 'No location'}</p>
+                    {event.date && <p className="text-muted-foreground text-sm">{new Date(event.date).toLocaleString()}</p>}
                 </div>
                 {/* Status badge could go here */}
             </div>
