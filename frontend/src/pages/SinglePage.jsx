@@ -461,6 +461,7 @@ function SinglePage() {
 
         lines.push(`
         Please propose 3–5 concrete, feasible activity ideas that fit the budgets and vibes above.
+        Please suggest only based on the event location,vibe and budget provided, suggest only activities that actually exist in or near that location.
         Please return your ideas as a JSON formatted like so:
 {
   "activities": [
