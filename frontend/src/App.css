@@ -208,6 +208,8 @@
 
   .sidebar.open {
     transform: translateX(0);
+    z-index: 40;
+    /* Ensure it's above the overlay (z-index 30) */
   }
 
   .main-content {
@@ -644,6 +646,10 @@
   color: var(--foreground);
 }
 
+.sidebar-overlay {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .mobile-menu-btn {
     display: flex;
@@ -652,6 +658,7 @@
   }
 
   .sidebar-overlay {
+    display: block;
     position: fixed;
     top: 0;
     left: 0;
