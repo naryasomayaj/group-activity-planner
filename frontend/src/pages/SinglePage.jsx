@@ -1294,31 +1294,33 @@ function SinglePage() {
                         }}>Edit Event</Button>
                     )}
 
-                    {/* Edit Preferences Button - For Everyone */}
-                    <Button
-                        variant="primary" // Changed from secondary to primary
-                        onClick={() => {
-                            const my = (event.preferences && event.preferences[auth.currentUser?.uid]) || {};
-                            // Use stored interests if available, otherwise fall back to profile interests
-                            const currentInterests = my.interests && my.interests.length > 0 ? my.interests : (Array.isArray(interests) ? interests : []);
+                    {/* Edit Preferences Button - Only for Participants */}
+                    {isParticipant && (
+                        <Button
+                            variant="primary" // Changed from secondary to primary
+                            onClick={() => {
+                                const my = (event.preferences && event.preferences[auth.currentUser?.uid]) || {};
+                                // Use stored interests if available, otherwise fall back to profile interests
+                                const currentInterests = my.interests && my.interests.length > 0 ? my.interests : (Array.isArray(interests) ? interests : []);
 
-                            setEventForm({
-                                name: event.name,
-                                location: event.location,
-                                date: event.date || "", // Keep date context
-                                budget: my.budget || "",
-                                vibes: my.vibes || [],
-                                interests: currentInterests
-                            });
-                            setVibeDraft("");
-                            setMode('myPref');
-                            setShowEventDrawer(false); // Close drawer
-                            setShowEventModal(true); // Open modal for preferences
-                        }}
-                        disabled={event.voting?.isOpen || event.voting?.winner}
-                    >
-                        Edit My Preference
-                    </Button>
+                                setEventForm({
+                                    name: event.name,
+                                    location: event.location,
+                                    date: event.date || "", // Keep date context
+                                    budget: my.budget || "",
+                                    vibes: my.vibes || [],
+                                    interests: currentInterests
+                                });
+                                setVibeDraft("");
+                                setMode('myPref');
+                                setShowEventDrawer(false); // Close drawer
+                                setShowEventModal(true); // Open modal for preferences
+                            }}
+                            disabled={event.voting?.isOpen || event.voting?.winner}
+                        >
+                            Edit My Preference
+                        </Button>
+                    )}
 
                     {event.createdBy === auth.currentUser?.uid && (
                         <Button variant="danger" onClick={() => deleteEvent(selectedGroup.id, event.id)}>Delete Event</Button>
