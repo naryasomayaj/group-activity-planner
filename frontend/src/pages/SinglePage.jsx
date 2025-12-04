@@ -626,7 +626,15 @@ function SinglePage() {
             };
 
             const newEvents = [...events];
-            newEvents[idx] = { ...e, preferences: prefs };
+
+            // Self-healing: Ensure user is in participants list
+            const currentParticipants = Array.isArray(e.participants) ? e.participants : [];
+            let updatedParticipants = [...currentParticipants];
+            if (!updatedParticipants.includes(user.uid)) {
+                updatedParticipants.push(user.uid);
+            }
+
+            newEvents[idx] = { ...e, preferences: prefs, participants: updatedParticipants };
 
             await updateDoc(groupRef, { events: newEvents });
             showToast('Saved your preference', 'success');
@@ -687,12 +695,12 @@ function SinglePage() {
 
             const groupRef = doc(db, 'Groups', groupId);
             const snap = await getDoc(groupRef);
-            if (!snap.exists()) { showToast('Group not found', 'error'); return; }
+            if (!snap.exists()) { showToast('Group not found', 'error'); return false; }
 
             const data = snap.data();
             const events = Array.isArray(data.events) ? data.events : [];
             const idx = events.findIndex(e => e.id === eventId);
-            if (idx === -1) { showToast('Event not found', 'error'); return; }
+            if (idx === -1) { showToast('Event not found', 'error'); return false; }
 
             const event = events[idx];
             const participants = Array.isArray(event.participants) ? event.participants : [];
@@ -700,7 +708,7 @@ function SinglePage() {
             const profileVibes = Array.isArray(interests) && interests.length ? interests : [];
             if (participants.includes(user.uid)) {
                 showToast('You already joined this event', 'info');
-                return;
+                return false;
             }
 
             const newPrefs = {
@@ -726,34 +734,30 @@ function SinglePage() {
 
             showToast('Joined event successfully!', 'success');
             await fetchGroups();
+            return true;
         } catch (error) {
             console.error('Error joining event:', error);
             showToast('Error joining event', 'error');
+            return false;
         }
     };
 
     const joinEventAndEditPrefs = async () => {
         if (!selectedEventForJoin || !selectedGroup) return;
 
-        await joinEvent(selectedGroup.id, selectedEventForJoin.id);
+        const success = await joinEvent(selectedGroup.id, selectedEventForJoin.id);
         setShowJoinConfirmationModal(false);
 
-        // Open Edit Preferences Modal
+        if (!success) return; // Stop if join failed
+
+        if (!success) return; // Stop if join failed
+
+        // Open Side Drawer directly
         const event = selectedEventForJoin;
-        // Re-fetch event data to ensure we have latest (though joinEvent fetches groups)
-        // We can just use default empty prefs since we just joined
-        setEventForm({
-            name: event.name,
-            location: event.location,
-            date: event.date || "",
-            budget: "",
-            vibes: [],
-            interests: Array.isArray(interests) ? interests : [],
-        });
-        setVibeDraft("");
-        setMode('myPref');
         setEditingEventId(event.id);
-        setShowEventModal(true);
+        setEventGroupId(selectedGroup.id);
+        setMode('view');
+        setShowEventDrawer(true);
         setSelectedEventForJoin(null);
     };
 
