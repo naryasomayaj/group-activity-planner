@@ -73,7 +73,7 @@ function ActivitiesViewer({ rawLLMtext, voting, isParticipant, currentUserId, on
                             }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                                     <div style={{ flex: 1 }}>
-                                        <h4 style={{ margin: "0 0 4px 0", display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <h4 style={{ margin: "0 0 4px 0", display: 'flex', alignItems: 'center', gap: '8px', color: '#111827' }}>
                                             {item.title}
                                             {idx === voting.winner.index && <span>🏆</span>}
                                         </h4>
@@ -165,7 +165,7 @@ function ActivitiesViewer({ rawLLMtext, voting, isParticipant, currentUserId, on
                             >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                                     <div style={{ flex: 1 }}>
-                                        <h4 style={{ margin: "0 0 6px 0", display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <h4 style={{ margin: "0 0 6px 0", display: 'flex', alignItems: 'center', gap: '8px', color: '#111827' }}>
                                             {isUserChoice && <span style={{ color: '#6366f1' }}>✓</span>}
                                             {item.title}
                                         </h4>
