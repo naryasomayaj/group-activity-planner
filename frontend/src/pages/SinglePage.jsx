@@ -10,6 +10,7 @@ import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, se
 import LoginForm from '../components/LoginForm';
 import SignupForm from '../components/SignUpForm';
 import ActivitiesViewer from '../components/ActivitiesViewer.jsx';
+import AILoading from '../components/AILoading.jsx';
 import { generateActivityIdeas } from "../ai/geminiClient.js";
 
 // UI Components
@@ -84,6 +85,8 @@ function SinglePage() {
         interests: [],
         date: "" // Add date field
     });
+    const [showJoinConfirmationModal, setShowJoinConfirmationModal] = useState(false);
+    const [selectedEventForJoin, setSelectedEventForJoin] = useState(null);
 
     // Auth Listener
     useEffect(() => {
@@ -629,6 +632,15 @@ function SinglePage() {
             showToast('Saved your preference', 'success');
             setShowEventModal(false);
             resetEventForm();
+
+            // Open drawer if not already open (e.g. after joining)
+            if (!showEventDrawer) {
+                setEditingEventId(eventId);
+                setEventGroupId(groupId);
+                setMode('view');
+                setShowEventDrawer(true);
+            }
+
             await fetchGroups();
         } catch (err) {
             console.error('Error saving preference:', err);
@@ -660,6 +672,7 @@ function SinglePage() {
             await updateDoc(groupRef, { events: newEvents });
 
             showToast('Event deleted', 'success');
+            setShowEventDrawer(false); // Close drawer
             await fetchGroups();
         } catch (err) {
             console.error('Error deleting event:', err);
@@ -719,6 +732,31 @@ function SinglePage() {
         }
     };
 
+    const joinEventAndEditPrefs = async () => {
+        if (!selectedEventForJoin || !selectedGroup) return;
+
+        await joinEvent(selectedGroup.id, selectedEventForJoin.id);
+        setShowJoinConfirmationModal(false);
+
+        // Open Edit Preferences Modal
+        const event = selectedEventForJoin;
+        // Re-fetch event data to ensure we have latest (though joinEvent fetches groups)
+        // We can just use default empty prefs since we just joined
+        setEventForm({
+            name: event.name,
+            location: event.location,
+            date: event.date || "",
+            budget: "",
+            vibes: [],
+            interests: Array.isArray(interests) ? interests : [],
+        });
+        setVibeDraft("");
+        setMode('myPref');
+        setEditingEventId(event.id);
+        setShowEventModal(true);
+        setSelectedEventForJoin(null);
+    };
+
     const leaveEvent = async (groupId, eventId) => {
         try {
             const user = auth.currentUser;
@@ -744,6 +782,7 @@ function SinglePage() {
             }
 
             showToast('Left event successfully!', 'success');
+            setShowEventDrawer(false); // Close drawer
             await fetchGroups();
         } catch (error) {
             console.error('Error leaving event:', error);
@@ -1178,10 +1217,16 @@ function SinglePage() {
                                 key={event.id}
                                 event={event}
                                 onClick={() => {
-                                    setEditingEventId(event.id);
-                                    setEventGroupId(selectedGroup.id);
-                                    setMode('view'); // New mode 'view'
-                                    setShowEventDrawer(true); // Open drawer instead of modal
+                                    const isParticipant = Array.isArray(event.participants) && auth.currentUser && event.participants.includes(auth.currentUser.uid);
+                                    if (isParticipant) {
+                                        setEditingEventId(event.id);
+                                        setEventGroupId(selectedGroup.id);
+                                        setMode('view'); // New mode 'view'
+                                        setShowEventDrawer(true); // Open drawer instead of modal
+                                    } else {
+                                        setSelectedEventForJoin(event);
+                                        setShowJoinConfirmationModal(true);
+                                    }
                                 }}
                             />
                         ))}
@@ -1246,15 +1291,19 @@ function SinglePage() {
                 </div>
 
                 {/* AI & Voting */}
-                {event.aiResult?.text && (
+                {(event.aiResult?.text || llmBusy.has(event.id)) && (
                     <div className="border-t pt-4">
-                        <ActivitiesViewer
-                            rawLLMtext={event.aiResult.text}
-                            voting={event.voting}
-                            isParticipant={isParticipant}
-                            currentUserId={auth.currentUser?.uid}
-                            onVote={(activityIndex) => castVote(selectedGroup.id, event.id, activityIndex)}
-                        />
+                        {llmBusy.has(event.id) ? (
+                            <AILoading />
+                        ) : (
+                            <ActivitiesViewer
+                                rawLLMtext={event.aiResult.text}
+                                voting={event.voting}
+                                isParticipant={isParticipant}
+                                currentUserId={auth.currentUser?.uid}
+                                onVote={(activityIndex) => castVote(selectedGroup.id, event.id, activityIndex)}
+                            />
+                        )}
 
                         <div className="flex gap-2 mt-4 flex-wrap">
                             {amCreator && !event.voting?.isOpen && !event.voting?.winner && (
@@ -1430,6 +1479,20 @@ function SinglePage() {
                     <div className="flex justify-end gap-2">
                         <Button variant="ghost" onClick={() => setShowJoinModal(false)}>Cancel</Button>
                         <Button onClick={() => joinGroup()} disabled={!joinAccessCode.trim()}>Join</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={showJoinConfirmationModal}
+                onClose={() => setShowJoinConfirmationModal(false)}
+                title="Join Event?"
+            >
+                <div className="space-y-4">
+                    <p>Would you like to join <strong>{selectedEventForJoin?.name}</strong>?</p>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="ghost" onClick={() => setShowJoinConfirmationModal(false)}>No</Button>
+                        <Button onClick={joinEventAndEditPrefs}>Yes, Join</Button>
                     </div>
                 </div>
             </Modal>
