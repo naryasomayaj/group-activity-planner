@@ -12,8 +12,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { auth, db } from '../firebase';
-import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
+import { db } from '../firebase';
+import { getAuth,signOut } from 'firebase/auth';
 import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, setDoc, runTransaction, onSnapshot } from 'firebase/firestore';
 import LoginForm from '../components/LoginForm';
 import SignupForm from '../components/SignUpForm';
