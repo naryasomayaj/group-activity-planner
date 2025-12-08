@@ -756,6 +756,24 @@ function SinglePage() {
             showToast('Error deleting event', 'error');
         }
     };
+    const joinEventAndEditPrefs = async () => {
+            if (!selectedEventForJoin || !selectedGroup) return;
+
+            const success = await joinEvent(selectedGroup.id, selectedEventForJoin.id);
+            setShowJoinConfirmationModal(false);
+
+            if (!success) return; // Stop if join failed
+
+            if (!success) return; // Stop if join failed
+
+            // Open Side Drawer directly
+            const event = selectedEventForJoin;
+            setEditingEventId(event.id);
+            setEventGroupId(selectedGroup.id);
+            setMode('view');
+            setShowEventDrawer(true);
+            setSelectedEventForJoin(null);
+        };
     //Adds the current user as a participant in an event.
     const joinEvent = async (groupId, eventId) => {
         try {
