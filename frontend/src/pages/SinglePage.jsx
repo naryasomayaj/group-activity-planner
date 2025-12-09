@@ -1,11 +1,19 @@
 /**
  * Group Activity Planner
- * Refactored for CS 520
+ * Project for the Course CS 520
+ *
+ * Single-page React app that:
+ * - Handles auth (login/signup) via Firebase Authentication
+ * - Stores user profiles in Firestore (Users collection)
+ * - Lets users create/join groups using access codes (Groups + AccessCodes collections)
+ * - Lets users create events, join/leave events, set preferences
+ * - Calls an LLM to generate activity ideas per event
+ * - Supports group voting on generated activities
  */
 
 import { useEffect, useState } from 'react';
-import { auth, db } from '../firebase';
-import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
+import { db } from '../firebase';
+import { getAuth,signOut } from 'firebase/auth';
 import { doc, getDoc, updateDoc, collection, addDoc, arrayUnion, arrayRemove, setDoc, runTransaction, onSnapshot } from 'firebase/firestore';
 import LoginForm from '../components/LoginForm';
 import SignupForm from '../components/SignUpForm';
@@ -23,6 +31,7 @@ import SideDrawer from '../components/ui/SideDrawer';
 
 function SinglePage() {
     const auth = getAuth();
+    // Tracks which event IDs are currently being processed by the LLM (disables Generate Ideas button)
     const [llmBusy, setLlmBusy] = useState(new Set());
     const [isLoggedIn, setLoggedIn] = useState(false);
     const [loginStep, setLoginStep] = useState(0);
@@ -57,6 +66,7 @@ function SinglePage() {
         return 'light';
     });
 
+    // Apply theme to document root whenever `theme` changes
     useEffect(() => {
         if (theme === 'dark') {
             document.documentElement.classList.add('dark');
@@ -77,13 +87,15 @@ function SinglePage() {
     const [mode, setMode] = useState(null);
     const [vibeDraft, setVibeDraft] = useState("");
     const [eventGroupId, setEventGroupId] = useState(null);
+
+    // Form used both for event creation and editing preferences (budget/vibes/date)
     const [eventForm, setEventForm] = useState({
         name: "",
         location: "",
         budget: "",
         vibes: [],
         interests: [],
-        date: "" // Add date field
+        date: "" 
     });
     const [showJoinConfirmationModal, setShowJoinConfirmationModal] = useState(false);
     const [selectedEventForJoin, setSelectedEventForJoin] = useState(null);
@@ -104,7 +116,10 @@ function SinglePage() {
         return unsubscribe;
     }, []);
 
-    // Real-time listener for selected group
+    // REAL-TIME GROUP LISTENER 
+    //
+    // When a group is selected, subscribe to that group's document in Firestore
+    // so event updates, new participants, voting, etc. appear in real-time.
     useEffect(() => {
         if (!selectedGroup?.id) return;
 
@@ -121,6 +136,7 @@ function SinglePage() {
         return () => unsub();
     }, [selectedGroup?.id]);
 
+    // AUTH /LOGOUT HANDLER
     const handleLogout = async (e) => {
         try {
             await signOut(auth);
@@ -131,6 +147,11 @@ function SinglePage() {
     }
 
     // Profile Logic
+
+    /* Writes the current in-memory profile state to Firestore (Users/{uid}).
+     * Uses setDoc with merge: true so we don't overwrite unrelated fields.
+     */
+
     const submitData = async () => {
         try {
             const user = auth.currentUser;
@@ -151,7 +172,7 @@ function SinglePage() {
             showToast("Error saving profile", "error");
         }
     }
-
+    //Loads current user's profile document from Firestore into React state.
     const fetchData = async () => {
         try {
             const user = auth.currentUser;
@@ -174,7 +195,9 @@ function SinglePage() {
             console.error("Error fetching user data:", error);
         }
     }
-
+    
+    // Saves profile changes and reloads from Firestore to keep state consistent.
+     
     const handleSubmit = async (e) => {
         try {
             await submitData();
@@ -184,12 +207,12 @@ function SinglePage() {
             console.error("Error saving profile:", error);
         }
     }
-
+    //Cancels profile editing and reloads last-saved data from Firestore.
     const handleCancel = (e) => {
         setProfileEdit(false);
         fetchData();
     }
-
+    //Adds a new interest string to the interests array.
     const addInterest = (e) => {
         e.preventDefault();
         if (newInterest.trim()) {
@@ -197,7 +220,7 @@ function SinglePage() {
             setNewInterest('');
         }
     }
-
+    //Removes an interest by index
     const removeInterest = (indexToRemove) => {
         setInterests(interests.filter((_, index) => index !== indexToRemove));
     }
@@ -209,7 +232,7 @@ function SinglePage() {
         const n = `${u.firstName || ''} ${u.lastName || ''}`.trim();
         return n || u.email || uid;
     };
-
+    //Fetches all groups the current user is a member of.
     const fetchGroups = async () => {
         try {
             const user = auth.currentUser;
@@ -289,10 +312,17 @@ function SinglePage() {
         }
     }
 
+    // Generates a short random uppercase access code, e.g. "X7Y2Z9".
     const generateAccessCode = () => {
         return Math.random().toString(36).substring(2, 8).toUpperCase();
     }
-
+    /**
+     * Creates a new group:
+     * - Generates a unique access code (with fallback)
+     * - Adds a document in Groups collection
+     * - Stores accessCode -> groupId mapping in AccessCodes collection
+     * - Adds groupId to current user's `userGroups` array
+     */
     const createGroup = async () => {
         try {
             const user = auth.currentUser;
@@ -342,7 +372,14 @@ function SinglePage() {
             showToast("Error creating group", "error");
         }
     }
-
+    
+    /**
+     * Allows a user to join a group using an access code.
+     * Validates:
+     * - code exists in AccessCodes
+     * - mapped groupId exists
+     * - user isn't already a member
+     */
     const joinGroup = async (code) => {
         try {
             const user = auth.currentUser;
@@ -393,7 +430,13 @@ function SinglePage() {
             showToast('Error joining group', 'error');
         }
     }
-
+    /**
+     * Allows a user to leave a group.
+     * If the last member leaves:
+     *  - deletes the group document
+     *  - deletes its access code mapping
+     * Uses a Firestore transaction to keep user and group documents in sync.
+     */
     const leaveGroup = async (groupId) => {
         try {
             const user = auth.currentUser;
@@ -441,6 +484,16 @@ function SinglePage() {
         setMode(null);
     }
 
+    /**
+     * Builds the text prompt for the LLM given:
+     * - event metadata (name, location)
+     * - group name
+     * - per-user preferences (budget, vibes, interests)
+     *
+     * The LLM is instructed to only suggest activities that actually exist
+     * in/near the chosen location and to return JSON.
+     */
+
     function buildLLMPrompt(event, groupName, nameOfFn) {
         const lines = [];
         lines.push(`You are an assistant that suggests group activity ideas.`);
@@ -482,6 +535,13 @@ function SinglePage() {
         return lines.join("\n");
     }
 
+    /**
+     * Creates a new event inside a group.
+     * - Validates name and budget
+     * - Adds a new event object to group's `events` array
+     * Returns the new event ID so that the caller can immediately open
+     * the "Edit My Preferences" view for that event.
+     */
     const addEvent = async (groupId) => {
         try {
             const user = auth.currentUser;
@@ -540,7 +600,8 @@ function SinglePage() {
             return null;
         }
     }
-
+    
+    //Updates event metadata (name, location, date)
     const updateEvent = async (groupId, eventId) => {
         try {
             const user = auth.currentUser;
@@ -593,7 +654,12 @@ function SinglePage() {
             showToast('Error updating event', 'error');
         }
     }
-
+    /**
+     * Saves the current user's preferences for a given event:
+     * - budget
+     * - vibes
+     * - interests (snapshotted from profile at save time)
+     */
     const updateMyEventPreference = async (groupId, eventId, myBudgetRaw, myVibesArr) => {
         try {
             const user = auth.currentUser;
@@ -655,7 +721,10 @@ function SinglePage() {
             showToast('Error saving preference', 'error');
         }
     };
-
+    /**
+     * Deletes an event from a group.
+     * Only the event creator is allowed to delete.
+     */
     const deleteEvent = async (groupId, eventId) => {
         try {
             const user = auth.currentUser;
@@ -687,7 +756,25 @@ function SinglePage() {
             showToast('Error deleting event', 'error');
         }
     };
+    const joinEventAndEditPrefs = async () => {
+            if (!selectedEventForJoin || !selectedGroup) return;
 
+            const success = await joinEvent(selectedGroup.id, selectedEventForJoin.id);
+            setShowJoinConfirmationModal(false);
+
+            if (!success) return; // Stop if join failed
+
+            if (!success) return; // Stop if join failed
+
+            // Open Side Drawer directly
+            const event = selectedEventForJoin;
+            setEditingEventId(event.id);
+            setEventGroupId(selectedGroup.id);
+            setMode('view');
+            setShowEventDrawer(true);
+            setSelectedEventForJoin(null);
+        };
+    //Adds the current user as a participant in an event.
     const joinEvent = async (groupId, eventId) => {
         try {
             const user = auth.currentUser;
@@ -741,26 +828,9 @@ function SinglePage() {
             return false;
         }
     };
-
-    const joinEventAndEditPrefs = async () => {
-        if (!selectedEventForJoin || !selectedGroup) return;
-
-        const success = await joinEvent(selectedGroup.id, selectedEventForJoin.id);
-        setShowJoinConfirmationModal(false);
-
-        if (!success) return; // Stop if join failed
-
-        if (!success) return; // Stop if join failed
-
-        // Open Side Drawer directly
-        const event = selectedEventForJoin;
-        setEditingEventId(event.id);
-        setEventGroupId(selectedGroup.id);
-        setMode('view');
-        setShowEventDrawer(true);
-        setSelectedEventForJoin(null);
-    };
-
+    /**
+     * Removes the current user from an event's participants list.
+     */
     const leaveEvent = async (groupId, eventId) => {
         try {
             const user = auth.currentUser;
@@ -793,7 +863,7 @@ function SinglePage() {
             showToast('Error leaving event', 'error');
         }
     }
-
+    //Adds one vibe in an event
     const addVibe = (e) => {
         e?.preventDefault?.();
         const v = (vibeDraft || "").trim();
@@ -801,7 +871,7 @@ function SinglePage() {
         setEventForm(prev => ({ ...prev, vibes: [...(prev.vibes || []), v] }));
         setVibeDraft("");
     };
-
+    // Removes a vibe from eventForm
     const removeVibe = (idx) => {
         setEventForm(prev => ({ ...prev, vibes: (prev.vibes || []).filter((_, i) => i !== idx) }));
     };
@@ -817,7 +887,12 @@ function SinglePage() {
             return newSet;
         });
     }
-
+    /**
+     * Calls the LLM (Gemini) to generate activity ideas for a specific event.
+     * - Builds prompt from event + preferences
+     * - Stores result under event.aiResult
+     * - Marks event ID in llmBusy while request is in-flight
+     */
     const generateForEvent = async (groupId, eventId) => {
         try {
             const user = auth.currentUser;
@@ -869,9 +944,17 @@ function SinglePage() {
     };
 
     // Voting Logic (kept as is)
+
+    // Voting is stored inside each event under `event.voting`:
+
+    /**
+     * Opens voting for an event's generated activities.
+     * - Requires aiResult.text be present
+     * - Parses the JSON for "activities"
+     * - Sets voting.isOpen = true and clears previous votes
+     */
     const startVoting = async (groupId, eventId) => {
         // ... (same logic, just ensure it uses correct state/db)
-        // I will copy the logic from the original file to ensure it works
         try {
             const user = auth.currentUser;
             if (!user) return;
@@ -900,7 +983,11 @@ function SinglePage() {
             showToast('Voting started!', 'success');
         } catch (err) { console.error('Error starting voting:', err); showToast('Error starting voting', 'error'); }
     };
-
+    /**
+     * Records a single user's vote for a specific activity index.
+     * - Only participants can vote
+     * - If all participants have voted, automatically calls closeVoting
+     */
     const castVote = async (groupId, eventId, activityIndex) => {
         try {
             const user = auth.currentUser;
@@ -925,7 +1012,14 @@ function SinglePage() {
             if (totalVotes === participants.length) { await closeVoting(groupId, eventId); } else { await fetchGroups(); showToast('Vote recorded!', 'success'); }
         } catch (err) { console.error('Error casting vote:', err); showToast('Error casting vote', 'error'); }
     };
-
+    /**
+     * Closes voting and selects a winning activity:
+     * - Parses activities from aiResult.text
+     * - Tallies votes per activity index
+     * - Finds max vote count
+     * - If tie, randomly picks one among tied indices
+     * - Stores winner metadata under voting.winner
+     */
     const closeVoting = async (groupId, eventId) => {
         try {
             const groupRef = doc(db, 'Groups', groupId);
@@ -963,7 +1057,11 @@ function SinglePage() {
             showToast('Voting closed! Winner selected.', 'success');
         } catch (err) { console.error('Error closing voting:', err); showToast('Error closing voting', 'error'); }
     };
-
+    
+    /**
+     * Clears voting state for an event.
+     * Only the event creator can reset voting.
+     */
     const resetVoting = async (groupId, eventId) => {
         try {
             const user = auth.currentUser;
